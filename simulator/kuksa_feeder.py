@@ -19,6 +19,7 @@ KUKSA_PORT = 55555
 # Topics
 TELEMETRY_TOPIC = "vehicle/simulator/telemetry"
 ALARM_TOPIC = "vehicle/orchestrator/alarms"
+VOICE_TOPIC = "vehicle/voice_assistant/events"
 
 # State tracking for Event-Driven Smart Logging
 state = {
@@ -40,8 +41,8 @@ mqtt_queue = asyncio.Queue()
 # MQTT Callbacks
 def on_connect(client, userdata, flags, rc, properties=None):
     logger.info("Connected to MQTT Broker successfully!")
-    client.subscribe([(TELEMETRY_TOPIC, 0), (ALARM_TOPIC, 0)])
-    logger.info(f"Subscribed to topics: {TELEMETRY_TOPIC}, {ALARM_TOPIC}")
+    client.subscribe([(TELEMETRY_TOPIC, 0), (ALARM_TOPIC, 0), (VOICE_TOPIC, 0)])
+    logger.info(f"Subscribed to topics: {TELEMETRY_TOPIC}, {ALARM_TOPIC}, {VOICE_TOPIC}")
 
 def on_message(client, userdata, msg):
     try:
@@ -124,6 +125,20 @@ async def process_telemetry(kuksa_client):
                 state["speed_alarm"] = speed_alarm
                 logger.info(f"[Smart Log] Custom VSS: ADAS Speed Alarm changed to: {speed_alarm}")
 
+        elif topic == VOICE_TOPIC:
+            # Parse voice event from C++ Voice Assistant via Orchestrator relay
+            state_val = str(payload.get("state", "IDLE"))
+            text_val = str(payload.get("text", ""))
+            response_val = str(payload.get("response", ""))
+            
+            updates["Vehicle.Cabin.VoiceAssistant.State"] = Datapoint(state_val)
+            if text_val:
+                updates["Vehicle.Cabin.VoiceAssistant.LastTranscribedText"] = Datapoint(text_val)
+            if response_val:
+                updates["Vehicle.Cabin.VoiceAssistant.LastResponse"] = Datapoint(response_val)
+                
+            logger.info(f"[Smart Log] Custom VSS: Voice Assistant State changed to: {state_val}")
+
         # Send batch updates to Kuksa Databroker
         if updates:
             try:
@@ -132,68 +147,6 @@ async def process_telemetry(kuksa_client):
                 logger.error(f"Failed to update Kuksa: {e}")
 
         mqtt_queue.task_done()
-
-# Mock Voice Assistant Scenario (periodically runs to demonstrate custom signals)
-async def mock_voice_assistant(kuksa_client):
-    logger.info("Custom VSS: Voice Assistant simulator background task started.")
-    queries = [
-        ("how fast am i going", "You are driving at speed_placeholder km/h."),
-        ("is the engine active", "Yes, the engine is currently running."),
-        ("tell me a driving tip", "Always maintain a safe distance from the vehicle in front of you.")
-    ]
-    
-    await asyncio.sleep(10) # Initial delay
-    
-    while True:
-        try:
-            # Select random query scenario
-            query_text, response_template = random.choice(queries)
-            
-            # Formulate response
-            speed_val = state["speed"] if state["speed"] is not None else 0.0
-            response_text = response_template.replace("speed_placeholder", f"{speed_val:.1f}")
-
-            # 1. LISTENING
-            logger.info("[Voice Assistant Mock] Detected wake word 'Covesa'...")
-            await kuksa_client.set_current_values({
-                "Vehicle.Cabin.VoiceAssistant.State": Datapoint("LISTENING")
-            })
-            await asyncio.sleep(2)
-
-            # 2. PROCESSING STT
-            await kuksa_client.set_current_values({
-                "Vehicle.Cabin.VoiceAssistant.State": Datapoint("PROCESSING_STT"),
-                "Vehicle.Cabin.VoiceAssistant.LastTranscribedText": Datapoint(query_text)
-            })
-            logger.info(f"[Voice Assistant Mock] Transcribed STT: '{query_text}'")
-            await asyncio.sleep(2)
-
-            # 3. PROCESSING LLM
-            await kuksa_client.set_current_values({
-                "Vehicle.Cabin.VoiceAssistant.State": Datapoint("PROCESSING_LLM")
-            })
-            await asyncio.sleep(2)
-
-            # 4. SPEAKING
-            await kuksa_client.set_current_values({
-                "Vehicle.Cabin.VoiceAssistant.State": Datapoint("SPEAKING"),
-                "Vehicle.Cabin.VoiceAssistant.LastResponse": Datapoint(response_text)
-            })
-            logger.info(f"[Voice Assistant Mock] Assistant replied: '{response_text}'")
-            await asyncio.sleep(4)
-
-            # 5. IDLE
-            await kuksa_client.set_current_values({
-                "Vehicle.Cabin.VoiceAssistant.State": Datapoint("IDLE")
-            })
-            logger.info("[Voice Assistant Mock] State reset to IDLE")
-            
-            # Wait 30 seconds before next mock query
-            await asyncio.sleep(30)
-            
-        except Exception as e:
-            logger.error(f"Error in mock voice assistant routine: {e}")
-            await asyncio.sleep(10)
 
 async def main():
     global loop
@@ -221,11 +174,7 @@ async def main():
         try:
             logger.info(f"Connecting to Kuksa Databroker at grpc://{KUKSA_HOST}:{KUKSA_PORT}...")
             async with VSSClient(KUKSA_HOST, KUKSA_PORT) as kuksa_client:
-                # Start processor and voice assistant task
-                task1 = asyncio.create_task(process_telemetry(kuksa_client))
-                task2 = asyncio.create_task(mock_voice_assistant(kuksa_client))
-                
-                await asyncio.gather(task1, task2)
+                await process_telemetry(kuksa_client)
         except Exception as e:
             logger.error(f"Kuksa connection error: {e}. Reconnecting in 3 seconds...")
             await asyncio.sleep(3)

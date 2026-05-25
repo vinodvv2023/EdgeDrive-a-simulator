@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 import cv2
 import asyncio
 import websockets
@@ -37,6 +38,25 @@ if camera is None:
 dashboard_clients = []
 to_simulator_queue = asyncio.Queue()
 
+# VoiceEvent model and API endpoint to receive status updates from C++ Voice Assistant
+class VoiceEvent(BaseModel):
+    state: str
+    text: str = ""
+    response: str = ""
+
+@app.post("/api/voice_event")
+def post_voice_event(event: VoiceEvent):
+    try:
+        payload = json.dumps({
+            "state": event.state,
+            "text": event.text,
+            "response": event.response
+        })
+        mqtt_client.publish("vehicle/voice_assistant/events", payload)
+    except Exception as e:
+        print(f"MQTT Publish Error (Orchestrator Voice Event): {e}")
+    return {"status": "ok"}
+
 def generate_frames():
     if camera is None:
         while True:
@@ -73,6 +93,19 @@ async def websocket_dashboard(websocket: WebSocket):
 is_over_120 = False
 has_beeped_80 = False
 
+def send_welcome_tts():
+    import urllib.request
+    import json
+    try:
+        url = "http://localhost:8081/speak"
+        payload = {"text": "Yes, the engine is currently running. welcome, Always maintain a safe distance from the vehicle in front of you."}
+        req_data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(url, data=req_data, headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req) as response:
+            pass
+    except Exception as e:
+        print(f"Failed to play welcome TTS: {e}")
+
 def alarm_worker():
     global is_over_120
     while True:
@@ -87,6 +120,7 @@ Thread(target=alarm_worker, daemon=True).start()
 async def connect_to_simulator():
     global is_over_120, has_beeped_80
     uri = "ws://127.0.0.1:8083"
+    last_started = False
     while True:
         try:
             async with websockets.connect(uri) as websocket:
@@ -104,6 +138,14 @@ async def connect_to_simulator():
                         message = await websocket.recv()
                         data = json.loads(message)
                         speed = data.get("speed", 0)
+                        
+                        # Detect engine start transition
+                        started = bool(data.get("started", False))
+                        if started and not last_started:
+                            last_started = True
+                            Thread(target=send_welcome_tts, daemon=True).start()
+                        elif not started:
+                            last_started = False
                         
                         out_str = f"Orchestrator Received: Speed: {speed} KMPH | RPM: {data.get('rpm')} | Gear: {data.get('gear')}"
                         

@@ -71,6 +71,41 @@ std::string unescape_json_string(const std::string& input) {
     return out;
 }
 
+// Helper to sanitize strings for JSON payloads
+std::string clean_for_json(std::string str) {
+    size_t pos = 0;
+    while ((pos = str.find("\\", pos)) != std::string::npos) {
+        str.replace(pos, 1, "/");
+        pos += 1;
+    }
+    pos = 0;
+    while ((pos = str.find("\"", pos)) != std::string::npos) {
+        str.replace(pos, 1, "'");
+        pos += 1;
+    }
+    pos = 0;
+    while ((pos = str.find("\n", pos)) != std::string::npos) {
+        str.replace(pos, 1, " ");
+        pos += 1;
+    }
+    return str;
+}
+
+// Helper to asynchronously report voice assistant events to the orchestrator
+void report_voice_state(const std::string& state, const std::string& text = "", const std::string& response = "") {
+    std::thread([state, text, response]() {
+        try {
+            httplib::Client client("localhost", 8082);
+            std::string cleaned_text = clean_for_json(text);
+            std::string cleaned_response = clean_for_json(response);
+            std::string body = "{\"state\": \"" + state + "\", \"text\": \"" + cleaned_text + "\", \"response\": \"" + cleaned_response + "\"}";
+            client.Post("/api/voice_event", body, "application/json");
+        } catch (...) {
+            // Ignore connection errors if orchestrator is not running
+        }
+    }).detach();
+}
+
 // Helper to clean text for TTS (remove markdown and replace \n with pause)
 std::string clean_for_tts(std::string input) {
     size_t pos = 0;
@@ -97,6 +132,7 @@ const int SAMPLE_RATE = 16000;
 void process_audio_pipeline(std::vector<float> wav_data) {
     status_message = "Processing STT...";
     current_state = STATE_PROCESSING_STT;
+    report_voice_state("PROCESSING_STT");
 
     httplib::Client stt_client("localhost", 8080);
     // Build fake WAV header (44 bytes) just to satisfy our basic parser in STT service
@@ -121,6 +157,7 @@ void process_audio_pipeline(std::vector<float> wav_data) {
         size_t end = json.find("\"", pos);
         transcript_text = json.substr(pos, end - pos);
     }
+    report_voice_state("PROCESSING_LLM", transcript_text);
 
     status_message = "Querying LLM...";
     current_state = STATE_PROCESSING_LLM;
@@ -159,6 +196,7 @@ void process_audio_pipeline(std::vector<float> wav_data) {
         // Keep history manageable (e.g. last 10 messages)
         if (chat_history.size() > 20) chat_history.erase(chat_history.begin(), chat_history.begin() + 2);
     }
+    report_voice_state("SPEAKING", transcript_text, display_response_text);
 
     status_message = "Speaking...";
     current_state = STATE_SPEAKING;
@@ -171,6 +209,7 @@ void process_audio_pipeline(std::vector<float> wav_data) {
 
     status_message = "Waiting for wake word...";
     current_state = STATE_IDLE;
+    report_voice_state("IDLE");
 }
 
 // Audio capture callback
@@ -198,6 +237,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
                 tts_client.Post("/stop", "", "application/json");
                 status_message = "Playback stopped.";
                 current_state = STATE_IDLE;
+                report_voice_state("IDLE");
             } else {
                 // Regular wake word
                 if (current_state == STATE_SPEAKING) {
@@ -205,6 +245,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
                     tts_client.Post("/stop", "", "application/json");
                 }
                 current_state = STATE_LISTENING;
+                report_voice_state("LISTENING");
                 status_message = "Listening...";
                 speech_duration = 0.0f;
                 silence_duration = 0.0f;
