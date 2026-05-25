@@ -66,8 +66,10 @@ bool parse_json_bool(const std::string& str, size_t pos) {
 float parse_json_float(const std::string& str, size_t pos) {
     size_t i = pos + 1;
     while (i < str.size() && (str[i] == ' ' || str[i] == ':')) i++;
+    size_t end = str.find_first_of(",}", i);
+    if (end == std::string::npos) return 0.0f;
     try {
-        return std::stof(str.substr(i));
+        return std::stof(str.substr(i, end - i));
     } catch (...) {
         return 0.0f;
     }
@@ -76,8 +78,10 @@ float parse_json_float(const std::string& str, size_t pos) {
 int parse_json_int(const std::string& str, size_t pos) {
     size_t i = pos + 1;
     while (i < str.size() && (str[i] == ' ' || str[i] == ':')) i++;
+    size_t end = str.find_first_of(",}", i);
+    if (end == std::string::npos) return 0;
     try {
-        return std::stoi(str.substr(i));
+        return std::stoi(str.substr(i, end - i));
     } catch (...) {
         return 0;
     }
@@ -86,13 +90,19 @@ int parse_json_int(const std::string& str, size_t pos) {
 void telemetry_fetch_worker() {
     while (telemetry_thread_running) {
         try {
-            httplib::Client client("localhost", 8082);
+            httplib::Client client("127.0.0.1", 8082);
             client.set_connection_timeout(0, 500000); // 500ms
             client.set_read_timeout(0, 500000); // 500ms
             
             auto res = client.Get("/api/vehicle_status");
             if (res && res->status == 200) {
                 std::string body = res->body;
+                
+                static int log_counter = 0;
+                if (++log_counter % 50 == 0) {
+                    std::cout << "[Telemetry Debug] Fetched status: " << body << std::endl;
+                }
+
                 float speed = 0.0f;
                 int rpm = 0;
                 int gear = 1;
@@ -129,9 +139,18 @@ void telemetry_fetch_worker() {
                     g_telemetry.started = started;
                     g_telemetry.speed_alarm = speed_alarm;
                 }
+            } else {
+                static int err_counter = 0;
+                if (++err_counter % 50 == 0) {
+                    std::cerr << "[Telemetry Debug] Failed to fetch. Status: " 
+                              << (res ? std::to_string(res->status) : "connection failed") << std::endl;
+                }
             }
         } catch (...) {
-            // Ignore connection errors if server is starting/stopping
+            static int exc_counter = 0;
+            if (++exc_counter % 50 == 0) {
+                std::cerr << "[Telemetry Debug] Connection Exception in client.Get()" << std::endl;
+            }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
@@ -189,7 +208,7 @@ std::string clean_for_json(std::string str) {
 void report_voice_state(const std::string& state, const std::string& text = "", const std::string& response = "") {
     std::thread([state, text, response]() {
         try {
-            httplib::Client client("localhost", 8082);
+            httplib::Client client("127.0.0.1", 8082);
             std::string cleaned_text = clean_for_json(text);
             std::string cleaned_response = clean_for_json(response);
             std::string body = "{\"state\": \"" + state + "\", \"text\": \"" + cleaned_text + "\", \"response\": \"" + cleaned_response + "\"}";
@@ -228,7 +247,7 @@ void process_audio_pipeline(std::vector<float> wav_data) {
     current_state = STATE_PROCESSING_STT;
     report_voice_state("PROCESSING_STT");
 
-    httplib::Client stt_client("localhost", 8080);
+    httplib::Client stt_client("127.0.0.1", 8080);
     // Build fake WAV header (44 bytes) just to satisfy our basic parser in STT service
     std::string wav_body(44, '\0');
     for (float f : wav_data) {
@@ -273,15 +292,17 @@ void process_audio_pipeline(std::vector<float> wav_data) {
                                "Use this telemetry state to answer any questions the driver asks about the vehicle's speed, engine, gear, rpm, or alarms. Keep your answers brief and natural.";
 
     // Send to Ollama /api/chat
-    httplib::Client ollama_client("localhost", 11434);
+    httplib::Client ollama_client("127.0.0.1", 11434);
     
     // Construct messages JSON
     std::string messages_json = "[";
-    messages_json += "{\"role\": \"system\", \"content\": \"" + clean_for_json(system_prompt) + "\"},";
     for (const auto& msg : chat_history) {
         messages_json += "{\"role\": \"" + msg.first + "\", \"content\": \"" + msg.second + "\"},";
     }
-    messages_json += "{\"role\": \"user\", \"content\": \"" + transcript_text + "\"}]";
+    
+    // Inject system prompt directly into the final user query message content to ensure Gemma processes it
+    std::string full_user_content = "[System Instruction: " + system_prompt + "] User query: " + transcript_text;
+    messages_json += "{\"role\": \"user\", \"content\": \"" + clean_for_json(full_user_content) + "\"}]";
     
     std::string ollama_body = "{\"model\":\"gemma:2b\", \"messages\":" + messages_json + ", \"stream\":false}";
     
@@ -313,7 +334,7 @@ void process_audio_pipeline(std::vector<float> wav_data) {
     current_state = STATE_SPEAKING;
 
     // Send to TTS
-    httplib::Client tts_client("localhost", 8081);
+    httplib::Client tts_client("127.0.0.1", 8081);
     std::string cleaned_tts = clean_for_tts(llm_response_text);
     std::string tts_body = "{\"text\":\"" + cleaned_tts + "\"}";
     tts_client.Post("/speak", tts_body, "application/json");
@@ -344,7 +365,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
             // Check if it is a stop command
             if (kw.find("stop") != std::string::npos) {
                 // Send stop to TTS
-                httplib::Client tts_client("localhost", 8081);
+                httplib::Client tts_client("127.0.0.1", 8081);
                 tts_client.Post("/stop", "", "application/json");
                 status_message = "Playback stopped.";
                 current_state = STATE_IDLE;
@@ -352,7 +373,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
             } else {
                 // Regular wake word
                 if (current_state == STATE_SPEAKING) {
-                    httplib::Client tts_client("localhost", 8081);
+                    httplib::Client tts_client("127.0.0.1", 8081);
                     tts_client.Post("/stop", "", "application/json");
                 }
                 current_state = STATE_LISTENING;
