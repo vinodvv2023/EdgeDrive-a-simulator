@@ -11,6 +11,7 @@
 #include <thread>
 #include <mutex>
 #include <iostream>
+#include <chrono>
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
@@ -42,6 +43,99 @@ std::string status_message = "Initializing...";
 std::string transcript_text = "";
 std::string llm_response_text = "";
 std::string display_response_text = ""; 
+
+// Telemetry structure & worker globals
+struct VehicleTelemetry {
+    float speed = 0.0f;
+    int rpm = 0;
+    int gear = 1;
+    bool started = false;
+    bool speed_alarm = false;
+};
+
+VehicleTelemetry g_telemetry;
+std::mutex telemetry_mutex;
+bool telemetry_thread_running = true;
+
+// Helper to parse JSON values from orchestrator status response
+bool parse_json_bool(const std::string& str, size_t pos) {
+    std::string sub = str.substr(pos, 15);
+    return sub.find("true") != std::string::npos;
+}
+
+float parse_json_float(const std::string& str, size_t pos) {
+    size_t i = pos + 1;
+    while (i < str.size() && (str[i] == ' ' || str[i] == ':')) i++;
+    try {
+        return std::stof(str.substr(i));
+    } catch (...) {
+        return 0.0f;
+    }
+}
+
+int parse_json_int(const std::string& str, size_t pos) {
+    size_t i = pos + 1;
+    while (i < str.size() && (str[i] == ' ' || str[i] == ':')) i++;
+    try {
+        return std::stoi(str.substr(i));
+    } catch (...) {
+        return 0;
+    }
+}
+
+void telemetry_fetch_worker() {
+    while (telemetry_thread_running) {
+        try {
+            httplib::Client client("localhost", 8082);
+            client.set_connection_timeout(0, 500000); // 500ms
+            client.set_read_timeout(0, 500000); // 500ms
+            
+            auto res = client.Get("/api/vehicle_status");
+            if (res && res->status == 200) {
+                std::string body = res->body;
+                float speed = 0.0f;
+                int rpm = 0;
+                int gear = 1;
+                bool started = false;
+                bool speed_alarm = false;
+                
+                size_t pos;
+                if ((pos = body.find("\"speed\"")) != std::string::npos) {
+                    pos = body.find(":", pos);
+                    if (pos != std::string::npos) speed = parse_json_float(body, pos);
+                }
+                if ((pos = body.find("\"rpm\"")) != std::string::npos) {
+                    pos = body.find(":", pos);
+                    if (pos != std::string::npos) rpm = parse_json_int(body, pos);
+                }
+                if ((pos = body.find("\"gear\"")) != std::string::npos) {
+                    pos = body.find(":", pos);
+                    if (pos != std::string::npos) gear = parse_json_int(body, pos);
+                }
+                if ((pos = body.find("\"started\"")) != std::string::npos) {
+                    pos = body.find(":", pos);
+                    if (pos != std::string::npos) started = parse_json_bool(body, pos);
+                }
+                if ((pos = body.find("\"speed_alarm\"")) != std::string::npos) {
+                    pos = body.find(":", pos);
+                    if (pos != std::string::npos) speed_alarm = parse_json_bool(body, pos);
+                }
+                
+                {
+                    std::lock_guard<std::mutex> lock(telemetry_mutex);
+                    g_telemetry.speed = speed;
+                    g_telemetry.rpm = rpm;
+                    g_telemetry.gear = gear;
+                    g_telemetry.started = started;
+                    g_telemetry.speed_alarm = speed_alarm;
+                }
+            }
+        } catch (...) {
+            // Ignore connection errors if server is starting/stopping
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
 
 // Audio recording buffer
 std::vector<float> audio_buffer;
@@ -162,11 +256,28 @@ void process_audio_pipeline(std::vector<float> wav_data) {
     status_message = "Querying LLM...";
     current_state = STATE_PROCESSING_LLM;
 
+    // Retrieve latest telemetry safely
+    VehicleTelemetry tel;
+    {
+        std::lock_guard<std::mutex> lock(telemetry_mutex);
+        tel = g_telemetry;
+    }
+
+    std::string system_prompt = "You are the EdgeDrive vehicle's AI Voice Assistant. You are connected to the vehicle's CAN bus and telemetry systems. "
+                               "Current vehicle telemetry state: "
+                               "Speed: " + std::to_string((int)tel.speed) + " KMPH, "
+                               "RPM: " + std::to_string(tel.rpm) + ", "
+                               "Gear: " + std::to_string(tel.gear) + ", "
+                               "Engine Status: " + (tel.started ? "Running" : "Stopped") + ", "
+                               "Speed Alarm: " + (tel.speed_alarm ? "Active" : "Inactive") + ". "
+                               "Use this telemetry state to answer any questions the driver asks about the vehicle's speed, engine, gear, rpm, or alarms. Keep your answers brief and natural.";
+
     // Send to Ollama /api/chat
     httplib::Client ollama_client("localhost", 11434);
     
     // Construct messages JSON
     std::string messages_json = "[";
+    messages_json += "{\"role\": \"system\", \"content\": \"" + clean_for_json(system_prompt) + "\"},";
     for (const auto& msg : chat_history) {
         messages_json += "{\"role\": \"" + msg.first + "\", \"content\": \"" + msg.second + "\"},";
     }
@@ -309,6 +420,9 @@ int main() {
     // Setup KWS
     InitializeKWS();
 
+    // Start background telemetry worker thread
+    std::thread telemetry_thread(telemetry_fetch_worker);
+
     // Setup Miniaudio
     ma_device_config deviceConfig = ma_device_config_init(ma_device_type_capture);
     deviceConfig.capture.format = ma_format_f32;
@@ -360,9 +474,9 @@ int main() {
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        // Assistant UI Window
+        // 1. Assistant UI Window (Left Half)
         ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(io.DisplaySize);
+        ImGui::SetNextWindowSize(ImVec2(450.0f, io.DisplaySize.y));
         ImGui::Begin("Assistant Panel", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
         ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Voice Assistant - Microservices Dashboard");
@@ -395,6 +509,53 @@ int main() {
 
         ImGui::End();
 
+        // 2. Vehicle Telemetry Dashboard Window (Right Half)
+        ImGui::SetNextWindowPos(ImVec2(450.0f, 0));
+        ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - 450.0f, io.DisplaySize.y));
+        ImGui::Begin("Vehicle Telemetry Dashboard", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+        
+        ImGui::TextColored(ImVec4(0.2f, 0.6f, 0.9f, 1.0f), "Vehicle Telemetry Dashboard");
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        VehicleTelemetry tel;
+        {
+            std::lock_guard<std::mutex> lock(telemetry_mutex);
+            tel = g_telemetry;
+        }
+
+        ImGui::Text("Engine Status: ");
+        ImGui::SameLine();
+        if (tel.started) {
+            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "RUNNING");
+        } else {
+            ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.2f, 1.0f), "STOPPED");
+        }
+
+        ImGui::Text("Transmission Gear: ");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "Gear %d", tel.gear);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Speed Meter
+        if (tel.speed_alarm) {
+            ImGui::TextColored(ImVec4(1.0f, 0.1f, 0.1f, 1.0f), "Speed: %.1f KMPH (ALARM ACTIVE!)", tel.speed);
+        } else {
+            ImGui::Text("Speed: %.1f KMPH", tel.speed);
+        }
+        ImGui::ProgressBar(tel.speed / 200.0f, ImVec2(-FLT_MIN, 25.0f), "Speed");
+
+        ImGui::Spacing();
+
+        // RPM Meter
+        ImGui::Text("Engine Speed: %d RPM", tel.rpm);
+        ImGui::ProgressBar((float)tel.rpm / 8000.0f, ImVec2(-FLT_MIN, 25.0f), "RPM");
+
+        ImGui::End();
+
         // Rendering
         ImGui::Render();
         const float clear_color_with_alpha[4] = { 0.1f, 0.1f, 0.1f, 1.f };
@@ -406,6 +567,11 @@ int main() {
     }
 
     // Cleanup
+    telemetry_thread_running = false;
+    if (telemetry_thread.joinable()) {
+        telemetry_thread.join();
+    }
+
     ma_device_uninit(&device);
     SherpaOnnxDestroyOnlineStream(kws_stream);
     SherpaOnnxDestroyKeywordSpotter(kws);

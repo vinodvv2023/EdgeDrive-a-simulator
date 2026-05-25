@@ -57,6 +57,11 @@ def post_voice_event(event: VoiceEvent):
         print(f"MQTT Publish Error (Orchestrator Voice Event): {e}")
     return {"status": "ok"}
 
+@app.get("/api/vehicle_status")
+def get_vehicle_status():
+    global vehicle_state
+    return vehicle_state
+
 def generate_frames():
     if camera is None:
         while True:
@@ -92,6 +97,15 @@ async def websocket_dashboard(websocket: WebSocket):
 # Alarm state
 is_over_120 = False
 has_beeped_80 = False
+
+# Global vehicle state cache for the Voice Assistant
+vehicle_state = {
+    "speed": 0.0,
+    "rpm": 0,
+    "gear": 1,
+    "started": False,
+    "speed_alarm": False
+}
 
 def send_welcome_tts():
     import urllib.request
@@ -162,6 +176,16 @@ async def connect_to_simulator():
                             if is_over_120: is_over_120 = False
                             if has_beeped_80: has_beeped_80 = False
                             print(out_str)
+                        
+                        # Update global vehicle state cache
+                        global vehicle_state
+                        vehicle_state = {
+                            "speed": float(speed),
+                            "rpm": int(data.get("rpm", 0)),
+                            "gear": int(data.get("gear", 1)),
+                            "started": started,
+                            "speed_alarm": is_over_120
+                        }
                         
                         # Publish alarm state via MQTT
                         try:
