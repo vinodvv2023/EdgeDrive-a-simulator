@@ -19,6 +19,12 @@ is_started = False
 gas_pressed = False
 brake_pressed = False
 
+# New simulated sensor states
+fuel_level = 100.0
+coolant_temp = 40.0
+cooling_fan = False
+tyre_pressures = [32.0, 32.0, 32.0, 32.0]
+
 async def handle_client(websocket):
     global is_started, gas_pressed, brake_pressed, gear
     try:
@@ -41,6 +47,7 @@ async def handle_client(websocket):
 
 async def simulate(websocket):
     global speed, rpm, gear, lat, lon, is_started, gas_pressed, brake_pressed
+    global fuel_level, coolant_temp, cooling_fan, tyre_pressures
     
     # Run the handler task
     handler_task = asyncio.create_task(handle_client(websocket))
@@ -82,6 +89,30 @@ async def simulate(websocket):
                 lat += 0.00001 * (speed / 100.0)
                 lon += 0.00001 * (speed / 100.0)
                 
+                # Fuel depletion (drops to 15% after 1 minute)
+                if fuel_level > 0.0:
+                    fuel_level = max(0.0, fuel_level - 0.1417)
+                    
+                # Tyre pressure leak (Front Left tyre slow leak: drops 0.05 PSI per step)
+                if tyre_pressures[0] > 10.0:
+                    tyre_pressures[0] = max(10.0, tyre_pressures[0] - 0.05)
+                    
+                # Radiator engine coolant temperature
+                if cooling_fan:
+                    coolant_temp += 0.01
+                    if coolant_temp > 92.0:
+                        coolant_temp -= 0.03
+                else:
+                    coolant_temp += 0.05
+                    if coolant_temp >= 95.0:
+                        cooling_fan = True
+            else:
+                # Reset simulation parameters when engine is turned off for easy repeat testing
+                fuel_level = 100.0
+                coolant_temp = 40.0
+                cooling_fan = False
+                tyre_pressures = [32.0, 32.0, 32.0, 32.0]
+                
             data = {
                 "started": is_started,
                 "speed": round(speed, 1),
@@ -89,7 +120,11 @@ async def simulate(websocket):
                 "gear": gear,
                 "lat": lat,
                 "lon": lon,
-                "pedals": {"gas": gas_pressed, "brake": brake_pressed}
+                "pedals": {"gas": gas_pressed, "brake": brake_pressed},
+                "fuel_level": round(fuel_level, 2),
+                "coolant_temp": round(coolant_temp, 2),
+                "cooling_fan": cooling_fan,
+                "tyre_pressures": [round(p, 2) for p in tyre_pressures]
             }
             
             print(f"CAN Sim Output: Speed: {data['speed']} KMPH | RPM: {data['rpm']} | Gear: {data['gear']} | Gas: {gas_pressed}")

@@ -51,6 +51,17 @@ struct VehicleTelemetry {
     int gear = 1;
     bool started = false;
     bool speed_alarm = false;
+    float fuel_level = 100.0f;
+    float coolant_temp = 40.0f;
+    bool cooling_fan = false;
+    float tyre_pressures[4];
+
+    VehicleTelemetry() {
+        tyre_pressures[0] = 32.0f;
+        tyre_pressures[1] = 32.0f;
+        tyre_pressures[2] = 32.0f;
+        tyre_pressures[3] = 32.0f;
+    }
 };
 
 VehicleTelemetry g_telemetry;
@@ -66,7 +77,7 @@ bool parse_json_bool(const std::string& str, size_t pos) {
 float parse_json_float(const std::string& str, size_t pos) {
     size_t i = pos + 1;
     while (i < str.size() && (str[i] == ' ' || str[i] == ':')) i++;
-    size_t end = str.find_first_of(",}", i);
+    size_t end = str.find_first_of(",}]", i);
     if (end == std::string::npos) return 0.0f;
     try {
         return std::stof(str.substr(i, end - i));
@@ -78,7 +89,7 @@ float parse_json_float(const std::string& str, size_t pos) {
 int parse_json_int(const std::string& str, size_t pos) {
     size_t i = pos + 1;
     while (i < str.size() && (str[i] == ' ' || str[i] == ':')) i++;
-    size_t end = str.find_first_of(",}", i);
+    size_t end = str.find_first_of(",}]", i);
     if (end == std::string::npos) return 0;
     try {
         return std::stoi(str.substr(i, end - i));
@@ -108,6 +119,10 @@ void telemetry_fetch_worker() {
                 int gear = 1;
                 bool started = false;
                 bool speed_alarm = false;
+                float fuel_level = 100.0f;
+                float coolant_temp = 40.0f;
+                bool cooling_fan = false;
+                float tyre_pressures[4] = { 32.0f, 32.0f, 32.0f, 32.0f };
                 
                 size_t pos;
                 if ((pos = body.find("\"speed\"")) != std::string::npos) {
@@ -130,6 +145,28 @@ void telemetry_fetch_worker() {
                     pos = body.find(":", pos);
                     if (pos != std::string::npos) speed_alarm = parse_json_bool(body, pos);
                 }
+                if ((pos = body.find("\"fuel_level\"")) != std::string::npos) {
+                    pos = body.find(":", pos);
+                    if (pos != std::string::npos) fuel_level = parse_json_float(body, pos);
+                }
+                if ((pos = body.find("\"coolant_temp\"")) != std::string::npos) {
+                    pos = body.find(":", pos);
+                    if (pos != std::string::npos) coolant_temp = parse_json_float(body, pos);
+                }
+                if ((pos = body.find("\"cooling_fan\"")) != std::string::npos) {
+                    pos = body.find(":", pos);
+                    if (pos != std::string::npos) cooling_fan = parse_json_bool(body, pos);
+                }
+                if ((pos = body.find("\"tyre_pressures\"")) != std::string::npos) {
+                    pos = body.find("[", pos);
+                    if (pos != std::string::npos) {
+                        for (int i = 0; i < 4; i++) {
+                            tyre_pressures[i] = parse_json_float(body, pos);
+                            pos = body.find(",", pos + 1);
+                            if (pos == std::string::npos) break;
+                        }
+                    }
+                }
                 
                 {
                     std::lock_guard<std::mutex> lock(telemetry_mutex);
@@ -138,6 +175,12 @@ void telemetry_fetch_worker() {
                     g_telemetry.gear = gear;
                     g_telemetry.started = started;
                     g_telemetry.speed_alarm = speed_alarm;
+                    g_telemetry.fuel_level = fuel_level;
+                    g_telemetry.coolant_temp = coolant_temp;
+                    g_telemetry.cooling_fan = cooling_fan;
+                    for (int i = 0; i < 4; i++) {
+                        g_telemetry.tyre_pressures[i] = tyre_pressures[i];
+                    }
                 }
             } else {
                 static int err_counter = 0;
@@ -288,8 +331,15 @@ void process_audio_pipeline(std::vector<float> wav_data) {
                                "RPM: " + std::to_string(tel.rpm) + ", "
                                "Gear: " + std::to_string(tel.gear) + ", "
                                "Engine Status: " + (tel.started ? "Running" : "Stopped") + ", "
-                               "Speed Alarm: " + (tel.speed_alarm ? "Active" : "Inactive") + ". "
-                               "Use this telemetry state to answer any questions the driver asks about the vehicle's speed, engine, gear, rpm, or alarms. Keep your answers brief and natural.";
+                               "Speed Alarm: " + (tel.speed_alarm ? "Active" : "Inactive") + ", "
+                               "Fuel Level: " + std::to_string((int)tel.fuel_level) + "%, "
+                               "Engine Coolant Temp: " + std::to_string((int)tel.coolant_temp) + " C, "
+                               "Cooling Fan Status: " + (tel.cooling_fan ? "Active" : "Inactive") + ", "
+                               "Tyre Pressures (PSI): FL=" + std::to_string((int)tel.tyre_pressures[0]) + 
+                               ", FR=" + std::to_string((int)tel.tyre_pressures[1]) + 
+                               ", RL=" + std::to_string((int)tel.tyre_pressures[2]) + 
+                               ", RR=" + std::to_string((int)tel.tyre_pressures[3]) + ". "
+                               "Use this telemetry state to answer any questions the driver asks about the vehicle's speed, engine, gear, rpm, fuel, coolant temperature, cooling fan, or tyre pressures. Keep your answers brief and natural.";
 
     // Send to Ollama /api/chat
     httplib::Client ollama_client("127.0.0.1", 11434);
@@ -567,13 +617,54 @@ int main() {
         } else {
             ImGui::Text("Speed: %.1f KMPH", tel.speed);
         }
-        ImGui::ProgressBar(tel.speed / 200.0f, ImVec2(-FLT_MIN, 25.0f), "Speed");
+        ImGui::ProgressBar(tel.speed / 200.0f, ImVec2(-FLT_MIN, 20.0f), "Speed");
 
         ImGui::Spacing();
 
         // RPM Meter
         ImGui::Text("Engine Speed: %d RPM", tel.rpm);
-        ImGui::ProgressBar((float)tel.rpm / 8000.0f, ImVec2(-FLT_MIN, 25.0f), "RPM");
+        ImGui::ProgressBar((float)tel.rpm / 8000.0f, ImVec2(-FLT_MIN, 20.0f), "RPM");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Fuel Level Progress Bar
+        if (tel.fuel_level <= 15.0f) {
+            ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "Fuel Level: %.1f%% (LOW FUEL!)", tel.fuel_level);
+        } else {
+            ImGui::Text("Fuel Level: %.1f%%", tel.fuel_level);
+        }
+        ImGui::ProgressBar(tel.fuel_level / 100.0f, ImVec2(-FLT_MIN, 20.0f), "Fuel");
+
+        ImGui::Spacing();
+
+        // Coolant Temp & Fan Status
+        ImGui::Text("Radiator Coolant Temp: %.1f *C", tel.coolant_temp);
+        ImGui::Text("Cooling Fan: ");
+        ImGui::SameLine();
+        if (tel.cooling_fan) {
+            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.8f, 1.0f), "ACTIVE");
+        } else {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "OFF");
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // 2x2 Tyre Pressures Layout
+        ImGui::Text("Tyre Pressures (PSI):");
+        ImGui::Columns(2, "tyres", false);
+        const char* labels[] = { "FL: ", "FR: ", "RL: ", "RR: " };
+        for (int i = 0; i < 4; i++) {
+            ImVec4 color = (tel.tyre_pressures[i] < 24.0f) ? ImVec4(1.0f, 0.2f, 0.2f, 1.0f) : ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
+            ImGui::Text("%s", labels[i]);
+            ImGui::SameLine();
+            ImGui::TextColored(color, "%.1f PSI", tel.tyre_pressures[i]);
+            ImGui::NextColumn();
+        }
+        ImGui::Columns(1);
 
         ImGui::End();
 

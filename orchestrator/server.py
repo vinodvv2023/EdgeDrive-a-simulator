@@ -104,14 +104,35 @@ vehicle_state = {
     "rpm": 0,
     "gear": 1,
     "started": False,
-    "speed_alarm": False
+    "speed_alarm": False,
+    "fuel_level": 100.0,
+    "coolant_temp": 40.0,
+    "cooling_fan": False,
+    "tyre_pressures": [32.0, 32.0, 32.0, 32.0]
 }
+
+# Warning alarm states to prevent TTS spam
+has_warned_fuel = False
+has_warned_tyre = False
+
+def send_warning_tts(text):
+    import urllib.request
+    import json
+    try:
+        url = "http://127.0.0.1:8081/speak"
+        payload = {"text": text}
+        req_data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(url, data=req_data, headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req) as response:
+            pass
+    except Exception as e:
+        print(f"Failed to play warning TTS: {e}")
 
 def send_welcome_tts():
     import urllib.request
     import json
     try:
-        url = "http://localhost:8081/speak"
+        url = "http://127.0.0.1:8081/speak"
         payload = {"text": "Yes, the engine is currently running. welcome, Always maintain a safe distance from the vehicle in front of you."}
         req_data = json.dumps(payload).encode('utf-8')
         req = urllib.request.Request(url, data=req_data, headers={'Content-Type': 'application/json'})
@@ -152,6 +173,10 @@ async def connect_to_simulator():
                         message = await websocket.recv()
                         data = json.loads(message)
                         speed = data.get("speed", 0)
+                        fuel_level = float(data.get("fuel_level", 100.0))
+                        coolant_temp = float(data.get("coolant_temp", 40.0))
+                        cooling_fan = bool(data.get("cooling_fan", False))
+                        tyre_pressures = data.get("tyre_pressures", [32.0, 32.0, 32.0, 32.0])
                         
                         # Detect engine start transition
                         started = bool(data.get("started", False))
@@ -184,8 +209,25 @@ async def connect_to_simulator():
                             "rpm": int(data.get("rpm", 0)),
                             "gear": int(data.get("gear", 1)),
                             "started": started,
-                            "speed_alarm": is_over_120
+                            "speed_alarm": is_over_120,
+                            "fuel_level": fuel_level,
+                            "coolant_temp": coolant_temp,
+                            "cooling_fan": cooling_fan,
+                            "tyre_pressures": tyre_pressures
                         }
+                        
+                        # TTS alerts check
+                        global has_warned_fuel, has_warned_tyre
+                        if started:
+                            if fuel_level <= 15.0 and not has_warned_fuel:
+                                has_warned_fuel = True
+                                Thread(target=lambda: send_warning_tts("Warning! Fuel level is low, currently at fifteen percent. Please refuel."), daemon=True).start()
+                            if tyre_pressures[0] <= 24.0 and not has_warned_tyre:
+                                has_warned_tyre = True
+                                Thread(target=lambda: send_warning_tts("Warning! Front left tyre pressure is critically low. Please check your tyres."), daemon=True).start()
+                        else:
+                            has_warned_fuel = False
+                            has_warned_tyre = False
                         
                         # Publish alarm state via MQTT
                         try:
