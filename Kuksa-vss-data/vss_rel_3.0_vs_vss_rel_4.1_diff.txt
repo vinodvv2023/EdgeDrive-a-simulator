@@ -1,0 +1,247 @@
+3.0 size: 393195 bytes
+4.1 size: 496578 bytes
+Total diffs: 243
+
+1. REMOVED Vehicle.children.TravelledDistance
+2. ADDED   Vehicle.children.IsAutoPowerOptimize
+3. ADDED   Vehicle.children.LowVoltageBattery
+4. ADDED   Vehicle.children.PowerOptimizeLevel
+5. ADDED   Vehicle.children.StartTime
+6. ADDED   Vehicle.children.TraveledDistance
+7. ADDED   Vehicle.children.TraveledDistanceSinceStart
+8. ADDED   Vehicle.children.TripDuration
+9. ADDED   Vehicle.children.TurningDiameter
+10. ADDED   Vehicle.children.WidthExcludingMirrors
+11. ADDED   Vehicle.children.WidthFoldedMirrors
+12. ADDED   Vehicle.children.WidthIncludingMirrors
+13. ADDED   Vehicle.children.ADAS.children.DMS
+14. ADDED   Vehicle.children.ADAS.children.IsAutoPowerOptimize
+15. ADDED   Vehicle.children.ADAS.children.PowerOptimizeLevel
+16. ADDED   Vehicle.children.AverageSpeed.comment
+17. ADDED   Vehicle.children.Body.children.IsAutoPowerOptimize
+18. ADDED   Vehicle.children.Body.children.PowerOptimizeLevel
+19. ADDED   Vehicle.children.Body.children.Hood.comment
+20. ADDED   Vehicle.children.Body.children.Hood.children.Position
+21. ADDED   Vehicle.children.Body.children.Hood.children.Switch
+22. CHANGED Vehicle.children.Body.children.Hood.children.IsOpen.description: 'Hood open or closed. True = Open. False = Closed.' -> 'Is item open or closed? True = Fully or partially open. False = Fully closed.'
+23. CHANGED Vehicle.children.Body.children.Hood.description: 'Hood status.' -> 'Hood status. Start position for Hood is Closed.'
+24. REMOVED Vehicle.children.Body.children.Lights.children.IsBackupOn
+25. REMOVED Vehicle.children.Body.children.Lights.children.IsBrakeOn
+26. REMOVED Vehicle.children.Body.children.Lights.children.IsFrontFogOn
+27. REMOVED Vehicle.children.Body.children.Lights.children.IsHazardOn
+28. REMOVED Vehicle.children.Body.children.Lights.children.IsHighBeamOn
+29. REMOVED Vehicle.children.Body.children.Lights.children.IsLeftIndicatorOn
+30. REMOVED Vehicle.children.Body.children.Lights.children.IsLowBeamOn
+31. REMOVED Vehicle.children.Body.children.Lights.children.IsParkingOn
+32. REMOVED Vehicle.children.Body.children.Lights.children.IsRearFogOn
+33. REMOVED Vehicle.children.Body.children.Lights.children.IsRightIndicatorOn
+34. REMOVED Vehicle.children.Body.children.Lights.children.IsRunningOn
+35. ADDED   Vehicle.children.Body.children.Lights.children.Backup
+36. ADDED   Vehicle.children.Body.children.Lights.children.Beam
+37. ADDED   Vehicle.children.Body.children.Lights.children.Brake
+38. ADDED   Vehicle.children.Body.children.Lights.children.DirectionIndicator
+39. ADDED   Vehicle.children.Body.children.Lights.children.Fog
+40. ADDED   Vehicle.children.Body.children.Lights.children.Hazard
+41. ADDED   Vehicle.children.Body.children.Lights.children.IsHighBeamSwitchOn
+42. ADDED   Vehicle.children.Body.children.Lights.children.LicensePlate
+43. ADDED   Vehicle.children.Body.children.Lights.children.LightSwitch
+44. ADDED   Vehicle.children.Body.children.Lights.children.Parking
+45. ADDED   Vehicle.children.Body.children.Lights.children.Running
+46. CHANGED Vehicle.children.Body.children.Lights.description: 'All lights.' -> 'Exterior lights.'
+47. REMOVED Vehicle.children.Body.children.Mirrors.children.Left
+48. REMOVED Vehicle.children.Body.children.Mirrors.children.Right
+49. ADDED   Vehicle.children.Body.children.Mirrors.children.DriverSide
+50. ADDED   Vehicle.children.Body.children.Mirrors.children.PassengerSide
+51. CHANGED Vehicle.children.Body.children.Raindetection.description: 'Rainsensor signals.' -> 'Rain sensor signals.'
+52. ADDED   Vehicle.children.Body.children.RefuelPosition.deprecation
+53. ADDED   Vehicle.children.Body.children.Trunk.comment
+54. ADDED   Vehicle.children.Body.children.Trunk.children.Front.comment
+55. ADDED   Vehicle.children.Body.children.Trunk.children.Front.children.IsLightOn
+56. ADDED   Vehicle.children.Body.children.Trunk.children.Front.children.Position
+57. ADDED   Vehicle.children.Body.children.Trunk.children.Front.children.Switch
+58. CHANGED Vehicle.children.Body.children.Trunk.children.Front.children.IsLocked.description: 'Is trunk locked or unlocked. True = Locked. False = Unlocked.' -> 'Is item locked or unlocked. True = Locked. False = Unlocked.'
+59. CHANGED Vehicle.children.Body.children.Trunk.children.Front.children.IsOpen.description: 'Trunk open or closed. True = Open. False = Closed.' -> 'Is item open or closed? True = Fully or partially open. False = Fully closed.'
+60. CHANGED Vehicle.children.Body.children.Trunk.children.Front.description: 'Trunk status.' -> 'Trunk status. Start position for Trunk is Closed.'
+61. ADDED   Vehicle.children.Body.children.Trunk.children.Rear.comment
+62. ADDED   Vehicle.children.Body.children.Trunk.children.Rear.children.IsLightOn
+63. ADDED   Vehicle.children.Body.children.Trunk.children.Rear.children.Position
+64. ADDED   Vehicle.children.Body.children.Trunk.children.Rear.children.Switch
+65. CHANGED Vehicle.children.Body.children.Trunk.children.Rear.children.IsLocked.description: 'Is trunk locked or unlocked. True = Locked. False = Unlocked.' -> 'Is item locked or unlocked. True = Locked. False = Unlocked.'
+66. CHANGED Vehicle.children.Body.children.Trunk.children.Rear.children.IsOpen.description: 'Trunk open or closed. True = Open. False = Closed.' -> 'Is item open or closed? True = Fully or partially open. False = Fully closed.'
+67. CHANGED Vehicle.children.Body.children.Trunk.children.Rear.description: 'Trunk status.' -> 'Trunk status. Start position for Trunk is Closed.'
+68. CHANGED Vehicle.children.Body.children.Trunk.description: 'Trunk status.' -> 'Trunk status. Start position for Trunk is Closed.'
+69. ADDED   Vehicle.children.Body.children.Windshield.children.Front.children.Wiping.children.System.children.Frequency.unit
+70. ADDED   Vehicle.children.Body.children.Windshield.children.Front.children.Wiping.children.WiperWear.unit
+71. ADDED   Vehicle.children.Body.children.Windshield.children.Rear.children.Wiping.children.System.children.Frequency.unit
+72. ADDED   Vehicle.children.Body.children.Windshield.children.Rear.children.Wiping.children.WiperWear.unit
+73. REMOVED Vehicle.children.Cabin.children.Lights
+74. ADDED   Vehicle.children.Cabin.children.IsAutoPowerOptimize
+75. ADDED   Vehicle.children.Cabin.children.IsWindowChildLockEngaged
+76. ADDED   Vehicle.children.Cabin.children.Light
+77. ADDED   Vehicle.children.Cabin.children.PowerOptimizeLevel
+78. REMOVED Vehicle.children.Cabin.children.Door.children.Row1.children.Left
+79. REMOVED Vehicle.children.Cabin.children.Door.children.Row1.children.Right
+80. ADDED   Vehicle.children.Cabin.children.Door.children.Row1.children.DriverSide
+81. ADDED   Vehicle.children.Cabin.children.Door.children.Row1.children.PassengerSide
+82. REMOVED Vehicle.children.Cabin.children.Door.children.Row2.children.Left
+83. REMOVED Vehicle.children.Cabin.children.Door.children.Row2.children.Right
+84. ADDED   Vehicle.children.Cabin.children.Door.children.Row2.children.DriverSide
+85. ADDED   Vehicle.children.Cabin.children.Door.children.Row2.children.PassengerSide
+86. REMOVED Vehicle.children.Cabin.children.DriverPosition.default
+87. ADDED   Vehicle.children.Cabin.children.DriverPosition.allowed
+88. CHANGED Vehicle.children.Cabin.children.DriverPosition.comment: 'Default value is position 1, i.e. a typical LHD vehicle.' -> 'Some signals use DriverSide and PassengerSide as instances. If this signal specifies that DriverPosition is LEFT or MIDDLE, then DriverSide refers to left side and PassengerSide to right side. If this signal specifies that DriverPosition is RIGHT, then DriverSide refers to right side and PassengerSide to left side.'
+89. CHANGED Vehicle.children.Cabin.children.DriverPosition.datatype: 'uint8' -> 'string'
+90. ADDED   Vehicle.children.Cabin.children.HVAC.children.IsAutoPowerOptimize
+91. ADDED   Vehicle.children.Cabin.children.HVAC.children.PowerOptimizeLevel
+92. REMOVED Vehicle.children.Cabin.children.HVAC.children.Station.children.Row1.children.Left
+93. REMOVED Vehicle.children.Cabin.children.HVAC.children.Station.children.Row1.children.Right
+94. ADDED   Vehicle.children.Cabin.children.HVAC.children.Station.children.Row1.children.Driver
+95. ADDED   Vehicle.children.Cabin.children.HVAC.children.Station.children.Row1.children.Passenger
+96. REMOVED Vehicle.children.Cabin.children.HVAC.children.Station.children.Row2.children.Left
+97. REMOVED Vehicle.children.Cabin.children.HVAC.children.Station.children.Row2.children.Right
+98. ADDED   Vehicle.children.Cabin.children.HVAC.children.Station.children.Row2.children.Driver
+99. ADDED   Vehicle.children.Cabin.children.HVAC.children.Station.children.Row2.children.Passenger
+100. REMOVED Vehicle.children.Cabin.children.HVAC.children.Station.children.Row3.children.Left
+101. REMOVED Vehicle.children.Cabin.children.HVAC.children.Station.children.Row3.children.Right
+102. ADDED   Vehicle.children.Cabin.children.HVAC.children.Station.children.Row3.children.Driver
+103. ADDED   Vehicle.children.Cabin.children.HVAC.children.Station.children.Row3.children.Passenger
+104. REMOVED Vehicle.children.Cabin.children.HVAC.children.Station.children.Row4.children.Left
+105. REMOVED Vehicle.children.Cabin.children.HVAC.children.Station.children.Row4.children.Right
+106. ADDED   Vehicle.children.Cabin.children.HVAC.children.Station.children.Row4.children.Driver
+107. ADDED   Vehicle.children.Cabin.children.HVAC.children.Station.children.Row4.children.Passenger
+108. ADDED   Vehicle.children.Cabin.children.Infotainment.children.IsAutoPowerOptimize
+109. ADDED   Vehicle.children.Cabin.children.Infotainment.children.PowerOptimizeLevel
+110. ADDED   Vehicle.children.Cabin.children.Infotainment.children.SmartphoneProjection
+111. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.Brightness
+112. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.DisplayOffDuration
+113. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.EVEnergyUnits
+114. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.FontSize
+115. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.FuelVolumeUnit
+116. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.IsScreenAlwaysOn
+117. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.LastActionTime
+118. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.SpeedUnit
+119. ADDED   Vehicle.children.Cabin.children.Infotainment.children.HMI.children.TirePressureUnit
+120. ADDED   Vehicle.children.Cabin.children.Infotainment.children.Media.children.Played.children.PlaybackRate
+121. ADDED   Vehicle.children.Cabin.children.Infotainment.children.Media.children.Volume.unit
+122. ADDED   Vehicle.children.Cabin.children.Infotainment.children.Navigation.children.GuidanceVoice
+123. ADDED   Vehicle.children.Cabin.children.Infotainment.children.Navigation.children.Map
+124. ADDED   Vehicle.children.Cabin.children.Infotainment.children.Navigation.children.Mute
+125. ADDED   Vehicle.children.Cabin.children.Infotainment.children.Navigation.children.Volume
+126. ADDED   Vehicle.children.Cabin.children.RearShade.children.IsOpen
+127. ADDED   Vehicle.children.Cabin.children.RearShade.children.Position.comment
+128. CHANGED Vehicle.children.Cabin.children.RearShade.children.Position.description: 'Position of window blind. 0 = Fully retracted. 100 = Fully deployed.' -> 'Item position. 0 = Start position 100 = End position.'
+129. CHANGED Vehicle.children.Cabin.children.RearShade.description: 'Rear window shade.' -> 'Rear window shade. Open = Retracted, Closed = Deployed. Start position for RearShade is Open/Retracted.'
+130. CHANGED Vehicle.children.Cabin.children.RearviewMirror.children.DimmingLevel.description: 'Dimming level of rearview mirror. 0 = undimmed. 100 = fully dimmed.' -> 'Dimming level of rear-view mirror. 0 = Undimmed. 100 = Fully dimmed.'
+131. CHANGED Vehicle.children.Cabin.children.RearviewMirror.description: 'Rearview mirror.' -> 'Rear-view mirror.'
+132. REMOVED Vehicle.children.Cabin.children.Seat.children.Row1.children.Pos1
+133. REMOVED Vehicle.children.Cabin.children.Seat.children.Row1.children.Pos2
+134. REMOVED Vehicle.children.Cabin.children.Seat.children.Row1.children.Pos3
+135. ADDED   Vehicle.children.Cabin.children.Seat.children.Row1.children.DriverSide
+136. ADDED   Vehicle.children.Cabin.children.Seat.children.Row1.children.Middle
+137. ADDED   Vehicle.children.Cabin.children.Seat.children.Row1.children.PassengerSide
+138. REMOVED Vehicle.children.Cabin.children.Seat.children.Row2.children.Pos1
+139. REMOVED Vehicle.children.Cabin.children.Seat.children.Row2.children.Pos2
+140. REMOVED Vehicle.children.Cabin.children.Seat.children.Row2.children.Pos3
+141. ADDED   Vehicle.children.Cabin.children.Seat.children.Row2.children.DriverSide
+142. ADDED   Vehicle.children.Cabin.children.Seat.children.Row2.children.Middle
+143. ADDED   Vehicle.children.Cabin.children.Seat.children.Row2.children.PassengerSide
+144. ADDED   Vehicle.children.Cabin.children.Sunroof.children.Position.unit
+145. ADDED   Vehicle.children.Cabin.children.Sunroof.children.Shade.children.IsOpen
+146. ADDED   Vehicle.children.Cabin.children.Sunroof.children.Shade.children.Position.comment
+147. CHANGED Vehicle.children.Cabin.children.Sunroof.children.Shade.children.Position.description: 'Position of window blind. 0 = Fully retracted. 100 = Fully deployed.' -> 'Item position. 0 = Start position 100 = End position.'
+148. CHANGED Vehicle.children.Cabin.children.Sunroof.children.Shade.description: 'Sun roof shade status.' -> 'Sun roof shade status. Open = Retracted, Closed = Deployed. Start position for Sunroof.Shade is Open/Retracted.'
+149. REMOVED Vehicle.children.Chassis.children.Track
+150. ADDED   Vehicle.children.Chassis.children.Axle.children.Row1.children.AxleWidth
+151. ADDED   Vehicle.children.Chassis.children.Axle.children.Row1.children.SteeringAngle
+152. ADDED   Vehicle.children.Chassis.children.Axle.children.Row1.children.TrackWidth
+153. ADDED   Vehicle.children.Chassis.children.Axle.children.Row1.children.TreadWidth
+154. ADDED   Vehicle.children.Chassis.children.Axle.children.Row2.children.AxleWidth
+155. ADDED   Vehicle.children.Chassis.children.Axle.children.Row2.children.SteeringAngle
+156. ADDED   Vehicle.children.Chassis.children.Axle.children.Row2.children.TrackWidth
+157. ADDED   Vehicle.children.Chassis.children.Axle.children.Row2.children.TreadWidth
+158. ADDED   Vehicle.children.Chassis.children.ParkingBrake.children.IsAutoApplyEnabled
+159. REMOVED Vehicle.children.Chassis.children.SteeringWheel.children.Position
+160. ADDED   Vehicle.children.Chassis.children.SteeringWheel.children.HeatingCooling
+161. CHANGED Vehicle.children.Chassis.children.Wheelbase.description: 'Overall wheel base, in mm.' -> 'Overall wheelbase, in mm.'
+162. ADDED   Vehicle.children.CurrentLocation.children.Timestamp.unit
+163. ADDED   Vehicle.children.Driver.children.IsHandsOnWheel
+164. CHANGED Vehicle.children.Driver.children.DistractionLevel.description: 'Distraction level of the driver will be the level how much the driver is distracted, by multiple factors. E.g. Driving situation, acustical or optical signales inside the cockpit, phone calls.' -> 'Distraction level of the driver, which can be evaluated by multiple factors e.g. driving situation, acoustical or optical signals inside the cockpit, ongoing phone calls.'
+165. CHANGED Vehicle.children.Driver.children.FatigueLevel.description: 'Fatigueness level of driver. Evaluated by multiple factors like trip time, behaviour of steering, eye status.' -> 'Fatigue level of the driver, which can be evaluated by multiple factors e.g. trip time, behaviour of steering, eye status.'
+166. ADDED   Vehicle.children.Driver.children.HeartRate.unit
+167. CHANGED Vehicle.children.Driver.children.Identifier.children.Issuer.description: 'Unique Issuer for the authentication of the occupant. E.g. https://accounts.funcorp.com.' -> 'Unique Issuer for the authentication of the occupant e.g. https://accounts.funcorp.com.'
+168. CHANGED Vehicle.children.Driver.children.Identifier.children.Subject.description: 'Subject for the authentication of the occupant. E.g. UserID 7331677.' -> 'Subject for the authentication of the occupant e.g. UserID 7331677.'
+169. ADDED   Vehicle.children.OBD.children.FuelType.max
+170. ADDED   Vehicle.children.OBD.children.FuelType.min
+171. CHANGED Vehicle.children.OBD.children.FuelType.datatype: 'string' -> 'uint8'
+172. CHANGED Vehicle.children.OBD.children.FuelType.type: 'sensor' -> 'attribute'
+173. ADDED   Vehicle.children.OBD.children.PidsA.allowed
+174. CHANGED Vehicle.children.OBD.children.PidsA.datatype: 'uint32' -> 'string[]'
+175. CHANGED Vehicle.children.OBD.children.PidsA.description: 'PID 00 - Bit array of the supported pids 01 to 20' -> 'PID 00 - Array of the supported PIDs 01 to 20 in Hexadecimal.'
+176. CHANGED Vehicle.children.OBD.children.PidsA.type: 'sensor' -> 'attribute'
+177. ADDED   Vehicle.children.OBD.children.PidsB.allowed
+178. CHANGED Vehicle.children.OBD.children.PidsB.datatype: 'uint32' -> 'string[]'
+179. CHANGED Vehicle.children.OBD.children.PidsB.description: 'PID 20 - Bit array of the supported pids 21 to 40' -> 'PID 20 - Array of the supported PIDs 21 to 40 in Hexadecimal.'
+180. CHANGED Vehicle.children.OBD.children.PidsB.type: 'sensor' -> 'attribute'
+181. ADDED   Vehicle.children.OBD.children.PidsC.allowed
+182. CHANGED Vehicle.children.OBD.children.PidsC.datatype: 'uint32' -> 'string[]'
+183. CHANGED Vehicle.children.OBD.children.PidsC.description: 'PID 40 - Bit array of the supported pids 41 to 60' -> 'PID 40 - Array of the supported PIDs 41 to 60 in Hexadecimal.'
+184. CHANGED Vehicle.children.OBD.children.PidsC.type: 'sensor' -> 'attribute'
+185. CHANGED Vehicle.children.OBD.children.Status.children.DTCCount.description: 'Number of sensor Trouble Codes (DTC)' -> 'Number of Diagnostic Trouble Codes (DTC)'
+186. CHANGED Vehicle.children.OBD.children.Status.children.IgnitionType.type: 'sensor' -> 'attribute'
+187. ADDED   Vehicle.children.Powertrain.children.IsAutoPowerOptimize
+188. ADDED   Vehicle.children.Powertrain.children.PowerOptimizeLevel
+189. ADDED   Vehicle.children.Powertrain.children.TimeRemaining
+190. REMOVED Vehicle.children.Powertrain.children.FuelSystem.children.Level
+191. REMOVED Vehicle.children.Powertrain.children.FuelSystem.children.TimeSinceStart
+192. ADDED   Vehicle.children.Powertrain.children.FuelSystem.children.AbsoluteLevel
+193. ADDED   Vehicle.children.Powertrain.children.FuelSystem.children.IsFuelPortFlapOpen
+194. ADDED   Vehicle.children.Powertrain.children.FuelSystem.children.RefuelPortPosition
+195. ADDED   Vehicle.children.Powertrain.children.FuelSystem.children.RelativeLevel
+196. ADDED   Vehicle.children.Powertrain.children.FuelSystem.children.TimeRemaining
+197. ADDED   Vehicle.children.Powertrain.children.FuelSystem.children.ConsumptionSinceStart.comment
+198. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.CellVoltage
+199. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.ErrorCodes
+200. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.TimeRemaining
+201. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.AveragePower
+202. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.ChargePortPosition
+203. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.ChargePortType
+204. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.EvseId
+205. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.IsChargePortFlapOpen
+206. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Location
+207. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.MaxPower
+208. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.ChargeLimit.default
+209. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.ChargePlugType.deprecation
+210. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.ChargePlugType.comment: 'A vehicle may have multiple charging inlets. IEC_TYPE_1_AC refers to Type 1 as defined in IEC 62196-2. Also known as Yazaki or J1772 connector. IEC_TYPE_2_AC refers to Type 2 as defined in IEC 62196-2. Also known as Mennekes connector. IEC_TYPE_3_AC refers to Type 3 as defined in IEC 62196-2. Also known as Scame connector. IEC_TYPE_4_DC refers to AA configuration as defined in IEC 62196-3. Also known as Type 4 or CHAdeMO connector. IEC_TYPE_1_CCS_DC refers to EE Configuration as defined in IEC 62196-3. Also known as CCS1 or Combo1 connector. IEC_TYPE_2_CCS_DC refers to FF Configuration as defined in IEC 62196-3. Also known as CCS2 or Combo2 connector. TESLA_ROADSTER, TESLA_HPWC (High Power Wall Connector) and TESLA_SUPERCHARGER refer to non-standardized charging inlets/methods used by Tesla. GBT_AC refers to connector specified in GB/T 20234.2. GBT_DC refers to connector specified in GB/T 20234.3. Also specified as BB Configuration in IEC 62196-3. OTHER shall be used if the vehicle has a charging connector, but not one of the connectors listed above. For additional information see https://en.wikipedia.org/wiki/IEC_62196.' -> 'A vehicle may have multiple charging inlets. The signal Charging.ChargePlugPosition can be used to indicate position of the charge plug. IEC_TYPE_1_AC refers to Type 1 as defined in IEC 62196-2. Also known as Yazaki or J1772 connector. IEC_TYPE_2_AC refers to Type 2 as defined in IEC 62196-2. Also known as Mennekes connector. IEC_TYPE_3_AC refers to Type 3 as defined in IEC 62196-2. Also known as Scame connector. IEC_TYPE_4_DC refers to AA configuration as defined in IEC 62196-3. Also known as Type 4 or CHAdeMO connector. IEC_TYPE_1_CCS_DC refers to EE Configuration as defined in IEC 62196-3. Also known as CCS1 or Combo1 connector. IEC_TYPE_2_CCS_DC refers to FF Configuration as defined in IEC 62196-3. Also known as CCS2 or Combo2 connector. TESLA_ROADSTER, TESLA_HPWC (High Power Wall Connector) and TESLA_SUPERCHARGER refer to non-standardized charging inlets/methods used by Tesla. GBT_AC refers to connector specified in GB/T 20234.2. GBT_DC refers to connector specified in GB/T 20234.3. Also specified as BB Configuration in IEC 62196-3. OTHER shall be used if the vehicle has a charging connector, but not one of the connectors listed above. For additional information see https://en.wikipedia.org/wiki/IEC_62196.'
+211. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.ChargePlugType.description: 'Type of charge plug (charging inlet) available on the vehicle. IEC types refer to IEC 62196,  GBT refers to  GB/T 20234.' -> 'Type of charge plugs (charging inlet) available on the vehicle. A charge plug type may occur multiple times in the list if there are multiple instances of that charge plug type. IEC types refer to IEC 62196,  GBT refers to  GB/T 20234.'
+212. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.ChargePortFlap.deprecation
+213. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.ChargePortFlap.description: 'Status of the charge port cover, can potentially be controlled manually.' -> 'Status of the charge port cover(s), can potentially be controlled manually. OPEN if at least one is open.'
+214. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.deprecation
+215. LIST_LEN Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed: 4 -> 8
+216. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed.[0]: 'MANUAL' -> 'DEACTIVATED'
+217. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed.[1]: 'TIMER' -> 'AUTOMATIC'
+218. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed.[2]: 'GRID' -> 'TRIGGERED'
+219. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed.[3]: 'PROFILE' -> 'TIMER'
+220. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed.[4]
+221. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed.[5]
+222. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed.[6]
+223. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.allowed.[7]
+224. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.comment: 'The mechanism to provide a profile to the vehicle is currently not covered by VSS.' -> 'EXTERNAL_ENTITY is the only mode where discharge may occur. The mechanism to provide a profile to the vehicle is currently not covered by VSS.'
+225. CHANGED Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Mode.description: 'Control of the charge process. MANUAL means manually initiated (plug-in event, companion app, etc). TIMER means timer-based. GRID means grid-controlled (eg ISO 15118). PROFILE means controlled by profile download to vehicle.' -> 'Describes how the charging process is controlled. DEACTIVATED means that charging and discharging is deactivated, nothing will happen if charger is connected. AUTOMATIC means charging will be initiated as soon as charger is connected. TRIGGERED means charging will be initiated when triggered by user. TIMER means charging is timer-based. PROFILE means charging is controlled by profile downloaded to vehicle. EXTERNAL_ENTITY means charging/discharging is controlled by the external entity connected to the vehicle. This includes GRID-controlled charging (e.g. ISO 15118), but also other cases where vehicle is connected to an arbitrary load that is powered by the vehicle. MANUAL means manually initiated (plug-in event, companion app, etc). GRID means grid-controlled (e.g. ISO 15118).'
+226. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Charging.children.Timer.children.Time.unit
+227. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.ProductionDate.unit
+228. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.StateOfCharge.children.CurrentEnergy
+229. ADDED   Vehicle.children.Powertrain.children.TractionBattery.children.Temperature.children.CellTemperature
+230. ADDED   Vehicle.children.TripMeterReading.comment
+231. CHANGED Vehicle.children.TripMeterReading.description: 'Current trip meter reading.' -> 'Trip meter reading.'
+232. CHANGED Vehicle.children.TripMeterReading.type: 'sensor' -> 'actuator'
+233. ADDED   Vehicle.children.VehicleIdentification.children.LicensePlate
+234. ADDED   Vehicle.children.VehicleIdentification.children.OptionalExtras
+235. ADDED   Vehicle.children.VehicleIdentification.children.VehicleExteriorColor
+236. ADDED   Vehicle.children.VehicleIdentification.children.DateVehicleFirstRegistered.unit
+237. ADDED   Vehicle.children.VehicleIdentification.children.ProductionDate.unit
+238. ADDED   Vehicle.children.VehicleIdentification.children.PurchaseDate.unit
+239. ADDED   Vehicle.children.VehicleIdentification.children.VehicleModelDate.unit
+240. ADDED   Vehicle.children.VersionVSS.children.Label.comment
+241. CHANGED Vehicle.children.VersionVSS.children.Major.default: 3 -> 4
+242. CHANGED Vehicle.children.VersionVSS.children.Minor.default: 0 -> 1
+243. ADDED   Vehicle.children.Width.deprecation

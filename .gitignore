@@ -1,0 +1,44 @@
+# Virtual Environment
+venv/
+.venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# CMake Build Directory
+build/
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+
+# Executables and compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.obj
+*.o
+*.a
+*.pdb
+
+# Large Models and weights
+*.bin
+*.onnx
+
+# Configuration and Generated Telemetry Outputs
+imgui.ini
+Kuksa-vss-data/custom_vss.json
+*.log
