@@ -172,13 +172,53 @@ Ensure you have the following installed on your system:
    npm install
    cd ..
    ```
-3. **Download Offline Models:**
-   * Make sure you have the Whisper model `ggml-base.bin` in the root directory.
-   * Make sure keyword files are extracted under `external/sherpa-onnx-kws-model/`.
+3. **Docker Container CLI Initialization:**
+   If you wish to spin up the required Docker containers manually instead of using the batch launcher:
+   ```powershell
+   # Run the Mosquitto MQTT Broker
+   docker run -d --name eclipse-mosquitto -p 1883:1883 eclipse-mosquitto
+   
+   # Run the Kuksa Databroker (replace path with your absolute workspace path)
+   docker run -d --name kuksa-databroker -p 55555:55555 -v "c:\Users\xtrem\Downloads\CPlusPlus\CAN CTRL\Kuksa-vss-data\custom_vss.json:/data/vss.json" ghcr.io/eclipse-kuksa/kuksa-databroker:latest --insecure --vss /data/vss.json
+   ```
+4. **Offline Models Setup:**
+   * Download the Whisper `ggml-base.bin` model and place it directly in the root workspace folder.
+   * Place/extract the wake-word models under `external/sherpa-onnx-kws-model/` (requires `encoder-...onnx`, `decoder-...onnx`, `joiner-...onnx`, `tokens.txt`, and `keywords.txt`).
 
 ---
 
-### 4.6 How to Run
+### 4.6 C++ Module Compilation (Whisper.cpp & Assistant GUI)
+The STT/TTS services and GUI client are written in C++ and compiled using CMake. By default, Whisper.cpp compiles with **NVIDIA CUDA** hardware acceleration enabled.
+
+#### Build Instructions:
+```powershell
+# Create and enter build directory
+mkdir build
+cd build
+
+# Configure the project with CMake
+cmake -DCMAKE_BUILD_TYPE=Release ..
+
+# Build all executables (stt_service, tts_service, assistant_gui)
+cmake --build . --config Release
+cd ..
+```
+The compiled binaries will be generated under `build/bin/Release/` (`stt_service.exe`, `tts_service.exe`, and `assistant_gui.exe`).
+
+#### Manually Running and Testing STT (Whisper.cpp) Service:
+* Ensure `ggml-base.bin` is placed in the workspace root or the folder you execute the service from.
+* Start the service:
+  ```powershell
+  .\build\bin\Release\stt_service.exe
+  ```
+* Test transcription by sending a WAV audio file via HTTP POST to the `/transcribe` endpoint:
+  ```powershell
+  curl -X POST --data-binary "@audio.wav" http://127.0.0.1:8080/transcribe
+  ```
+
+---
+
+### 4.7 How to Run
 A unified launch script, `run_assistant.bat`, handles setting up environment variables, compiling schemas, and launching all 10 services.
 
 Run the launcher from an administrative or standard Powershell/CMD terminal:
