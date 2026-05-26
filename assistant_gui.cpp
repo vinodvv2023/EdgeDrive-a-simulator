@@ -12,6 +12,8 @@
 #include <mutex>
 #include <iostream>
 #include <chrono>
+#include <map>
+#include <cfloat>
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
@@ -44,31 +46,31 @@ std::string transcript_text = "";
 std::string llm_response_text = "";
 std::string display_response_text = ""; 
 
-// Telemetry structure & worker globals
-struct VehicleTelemetry {
-    float speed = 0.0f;
-    int rpm = 0;
-    int gear = 1;
-    bool started = false;
-    bool speed_alarm = false;
-    float fuel_level = 100.0f;
-    float coolant_temp = 40.0f;
-    bool cooling_fan = false;
-    float tyre_pressures[4];
+// ─── Orchestrator-Driven Dynamic Telemetry Config ────────────────────────
+enum class FieldType { PROGRESS_BAR, TEXT, BOOLEAN, GRID_4 };
 
-    VehicleTelemetry() {
-        tyre_pressures[0] = 32.0f;
-        tyre_pressures[1] = 32.0f;
-        tyre_pressures[2] = 32.0f;
-        tyre_pressures[3] = 32.0f;
-    }
+struct FieldDef {
+    std::string              key;
+    std::string              label;
+    std::string              unit;
+    FieldType                type        = FieldType::TEXT;
+    float                    max_val     = 100.0f;
+    float                    warn_above  = FLT_MAX;
+    float                    warn_below  = -FLT_MAX;
+    std::string              warn_label;
+    std::string              true_label  = "YES";
+    std::string              false_label = "NO";
+    std::vector<std::string> sublabels;
+    bool                     llm_context = true;
 };
 
-VehicleTelemetry g_telemetry;
-std::mutex telemetry_mutex;
-bool telemetry_thread_running = true;
+std::vector<FieldDef>                      g_field_defs;    // populated once from /api/telemetry_config
+std::map<std::string, double>              g_values;        // scalar live values
+std::map<std::string, std::vector<double>> g_array_values;  // array live values (e.g. tyre_pressures)
+std::mutex   telemetry_mutex;
+bool         telemetry_thread_running = true;
 
-// Helper to parse JSON values from orchestrator status response
+// ─── JSON Parse Helpers ───────────────────────────────────────────────────
 bool parse_json_bool(const std::string& str, size_t pos) {
     std::string sub = str.substr(pos, 15);
     return sub.find("true") != std::string::npos;
@@ -79,11 +81,7 @@ float parse_json_float(const std::string& str, size_t pos) {
     while (i < str.size() && (str[i] == ' ' || str[i] == ':')) i++;
     size_t end = str.find_first_of(",}]", i);
     if (end == std::string::npos) return 0.0f;
-    try {
-        return std::stof(str.substr(i, end - i));
-    } catch (...) {
-        return 0.0f;
-    }
+    try { return std::stof(str.substr(i, end - i)); } catch (...) { return 0.0f; }
 }
 
 int parse_json_int(const std::string& str, size_t pos) {
@@ -91,109 +89,176 @@ int parse_json_int(const std::string& str, size_t pos) {
     while (i < str.size() && (str[i] == ' ' || str[i] == ':')) i++;
     size_t end = str.find_first_of(",}]", i);
     if (end == std::string::npos) return 0;
+    try { return std::stoi(str.substr(i, end - i)); } catch (...) { return 0; }
+}
+
+// Extract a quoted string value: { "key": "value" }
+std::string parse_json_string_value(const std::string& json, const std::string& key) {
+    std::string search = "\"" + key + "\"";
+    size_t pos = json.find(search);
+    if (pos == std::string::npos) return "";
+    size_t colon = json.find(":", pos);
+    if (colon == std::string::npos) return "";
+    size_t q1 = json.find('"', colon + 1);
+    if (q1 == std::string::npos) return "";
+    size_t q2 = json.find('"', q1 + 1);
+    if (q2 == std::string::npos) return "";
+    return json.substr(q1 + 1, q2 - q1 - 1);
+}
+
+// Extract an array of quoted strings: "key": ["a", "b"]
+std::vector<std::string> parse_json_string_array(const std::string& json, const std::string& key) {
+    std::vector<std::string> result;
+    std::string search = "\"" + key + "\"";
+    size_t pos = json.find(search);
+    if (pos == std::string::npos) return result;
+    size_t bracket = json.find('[', pos);
+    if (bracket == std::string::npos) return result;
+    size_t close  = json.find(']', bracket);
+    if (close == std::string::npos) return result;
+    std::string arr = json.substr(bracket + 1, close - bracket - 1);
+    size_t i = 0;
+    while ((i = arr.find('"', i)) != std::string::npos) {
+        size_t j = arr.find('"', i + 1);
+        if (j == std::string::npos) break;
+        result.push_back(arr.substr(i + 1, j - i - 1));
+        i = j + 1;
+    }
+    return result;
+}
+
+// Split a JSON string into top-level { } objects
+std::vector<std::string> split_json_objects(const std::string& json) {
+    std::vector<std::string> objects;
+    int depth = 0;
+    size_t start = std::string::npos;
+    for (size_t i = 0; i < json.size(); i++) {
+        if (json[i] == '{') { if (depth == 0) start = i; depth++; }
+        else if (json[i] == '}') {
+            depth--;
+            if (depth == 0 && start != std::string::npos) {
+                objects.push_back(json.substr(start, i - start + 1));
+                start = std::string::npos;
+            }
+        }
+    }
+    return objects;
+}
+
+// ─── Fetch Telemetry Config (once at startup) ───────────────────────────
+void fetch_telemetry_config() {
     try {
-        return std::stoi(str.substr(i, end - i));
+        httplib::Client client("127.0.0.1", 8082);
+        client.set_connection_timeout(3, 0);
+        client.set_read_timeout(3, 0);
+        auto res = client.Get("/api/telemetry_config");
+        if (!res || res->status != 200) {
+            std::cerr << "[Config] Could not fetch /api/telemetry_config. Dashboard will be empty until orchestrator is running." << std::endl;
+            return;
+        }
+        std::string body = res->body;
+        size_t fields_pos = body.find("\"fields\"");
+        if (fields_pos == std::string::npos) return;
+        size_t arr_start = body.find('[', fields_pos);
+        if (arr_start == std::string::npos) return;
+
+        auto field_objects = split_json_objects(body.substr(arr_start));
+
+        std::lock_guard<std::mutex> lock(telemetry_mutex);
+        g_field_defs.clear();
+        for (const auto& obj : field_objects) {
+            FieldDef fd;
+            fd.key = parse_json_string_value(obj, "key");
+            if (fd.key.empty()) continue;
+            fd.label       = parse_json_string_value(obj, "label");
+            fd.unit        = parse_json_string_value(obj, "unit");
+            fd.warn_label  = parse_json_string_value(obj, "warn_label");
+            fd.true_label  = parse_json_string_value(obj, "true_label");
+            fd.false_label = parse_json_string_value(obj, "false_label");
+            fd.sublabels   = parse_json_string_array(obj, "sublabels");
+            if (fd.true_label.empty())  fd.true_label  = "YES";
+            if (fd.false_label.empty()) fd.false_label = "NO";
+
+            std::string t = parse_json_string_value(obj, "type");
+            if      (t == "progress_bar") fd.type = FieldType::PROGRESS_BAR;
+            else if (t == "boolean")      fd.type = FieldType::BOOLEAN;
+            else if (t == "grid_4")       fd.type = FieldType::GRID_4;
+            else                          fd.type = FieldType::TEXT;
+
+            size_t p;
+            if ((p = obj.find("\"max\""))        != std::string::npos) fd.max_val    = parse_json_float(obj, obj.find(':', p));
+            if ((p = obj.find("\"warn_above\"")) != std::string::npos) fd.warn_above = parse_json_float(obj, obj.find(':', p));
+            if ((p = obj.find("\"warn_below\"")) != std::string::npos) fd.warn_below = parse_json_float(obj, obj.find(':', p));
+            if ((p = obj.find("\"llm_context\""))!= std::string::npos) fd.llm_context = parse_json_bool(obj, obj.find(':', p));
+            else fd.llm_context = true;
+
+            g_field_defs.push_back(fd);
+        }
+        std::cout << "[Config] Loaded " << g_field_defs.size() << " telemetry fields from orchestrator." << std::endl;
     } catch (...) {
-        return 0;
+        std::cerr << "[Config] Exception while fetching telemetry config." << std::endl;
     }
 }
 
+// ─── Background Telemetry Fetch Worker (10Hz, generic) ──────────────────
 void telemetry_fetch_worker() {
     while (telemetry_thread_running) {
         try {
             httplib::Client client("127.0.0.1", 8082);
-            client.set_connection_timeout(0, 500000); // 500ms
-            client.set_read_timeout(0, 500000); // 500ms
-            
+            client.set_connection_timeout(0, 500000);
+            client.set_read_timeout(0, 500000);
             auto res = client.Get("/api/vehicle_status");
             if (res && res->status == 200) {
                 std::string body = res->body;
-                
                 static int log_counter = 0;
-                if (++log_counter % 50 == 0) {
-                    std::cout << "[Telemetry Debug] Fetched status: " << body << std::endl;
+                if (++log_counter % 50 == 0)
+                    std::cout << "[Telemetry] " << body << std::endl;
+
+                std::map<std::string, double>              new_vals;
+                std::map<std::string, std::vector<double>> new_arr_vals;
+
+                // Copy field defs under lock, then parse without holding the lock
+                std::vector<FieldDef> fields_copy;
+                { std::lock_guard<std::mutex> lk(telemetry_mutex); fields_copy = g_field_defs; }
+
+                for (const auto& field : fields_copy) {
+                    std::string search = "\"" + field.key + "\"";
+                    size_t pos = body.find(search);
+                    if (pos == std::string::npos) continue;
+                    pos = body.find(':', pos);
+                    if (pos == std::string::npos) continue;
+
+                    if (field.type == FieldType::GRID_4) {
+                        size_t as = body.find('[', pos);
+                        if (as == std::string::npos) continue;
+                        size_t ae = body.find(']', as);
+                        if (ae == std::string::npos) continue;
+                        std::string arr_str = body.substr(as + 1, ae - as - 1);
+                        std::vector<double> vals;
+                        size_t i = 0;
+                        while (i < arr_str.size()) {
+                            while (i < arr_str.size() && (arr_str[i]==' '||arr_str[i]==',')) i++;
+                            if (i >= arr_str.size()) break;
+                            try { size_t n; vals.push_back(std::stod(arr_str.substr(i), &n)); i += n; }
+                            catch (...) { break; }
+                        }
+                        new_arr_vals[field.key] = vals;
+                    } else if (field.type == FieldType::BOOLEAN) {
+                        new_vals[field.key] = parse_json_bool(body, pos) ? 1.0 : 0.0;
+                    } else {
+                        new_vals[field.key] = (double)parse_json_float(body, pos);
+                    }
                 }
 
-                float speed = 0.0f;
-                int rpm = 0;
-                int gear = 1;
-                bool started = false;
-                bool speed_alarm = false;
-                float fuel_level = 100.0f;
-                float coolant_temp = 40.0f;
-                bool cooling_fan = false;
-                float tyre_pressures[4] = { 32.0f, 32.0f, 32.0f, 32.0f };
-                
-                size_t pos;
-                if ((pos = body.find("\"speed\"")) != std::string::npos) {
-                    pos = body.find(":", pos);
-                    if (pos != std::string::npos) speed = parse_json_float(body, pos);
-                }
-                if ((pos = body.find("\"rpm\"")) != std::string::npos) {
-                    pos = body.find(":", pos);
-                    if (pos != std::string::npos) rpm = parse_json_int(body, pos);
-                }
-                if ((pos = body.find("\"gear\"")) != std::string::npos) {
-                    pos = body.find(":", pos);
-                    if (pos != std::string::npos) gear = parse_json_int(body, pos);
-                }
-                if ((pos = body.find("\"started\"")) != std::string::npos) {
-                    pos = body.find(":", pos);
-                    if (pos != std::string::npos) started = parse_json_bool(body, pos);
-                }
-                if ((pos = body.find("\"speed_alarm\"")) != std::string::npos) {
-                    pos = body.find(":", pos);
-                    if (pos != std::string::npos) speed_alarm = parse_json_bool(body, pos);
-                }
-                if ((pos = body.find("\"fuel_level\"")) != std::string::npos) {
-                    pos = body.find(":", pos);
-                    if (pos != std::string::npos) fuel_level = parse_json_float(body, pos);
-                }
-                if ((pos = body.find("\"coolant_temp\"")) != std::string::npos) {
-                    pos = body.find(":", pos);
-                    if (pos != std::string::npos) coolant_temp = parse_json_float(body, pos);
-                }
-                if ((pos = body.find("\"cooling_fan\"")) != std::string::npos) {
-                    pos = body.find(":", pos);
-                    if (pos != std::string::npos) cooling_fan = parse_json_bool(body, pos);
-                }
-                if ((pos = body.find("\"tyre_pressures\"")) != std::string::npos) {
-                    pos = body.find("[", pos);
-                    if (pos != std::string::npos) {
-                        for (int i = 0; i < 4; i++) {
-                            tyre_pressures[i] = parse_json_float(body, pos);
-                            pos = body.find(",", pos + 1);
-                            if (pos == std::string::npos) break;
-                        }
-                    }
-                }
-                
-                {
-                    std::lock_guard<std::mutex> lock(telemetry_mutex);
-                    g_telemetry.speed = speed;
-                    g_telemetry.rpm = rpm;
-                    g_telemetry.gear = gear;
-                    g_telemetry.started = started;
-                    g_telemetry.speed_alarm = speed_alarm;
-                    g_telemetry.fuel_level = fuel_level;
-                    g_telemetry.coolant_temp = coolant_temp;
-                    g_telemetry.cooling_fan = cooling_fan;
-                    for (int i = 0; i < 4; i++) {
-                        g_telemetry.tyre_pressures[i] = tyre_pressures[i];
-                    }
-                }
-            } else {
-                static int err_counter = 0;
-                if (++err_counter % 50 == 0) {
-                    std::cerr << "[Telemetry Debug] Failed to fetch. Status: " 
-                              << (res ? std::to_string(res->status) : "connection failed") << std::endl;
-                }
+                std::lock_guard<std::mutex> lk(telemetry_mutex);
+                g_values       = new_vals;
+                g_array_values = new_arr_vals;
             }
+
         } catch (...) {
-            static int exc_counter = 0;
-            if (++exc_counter % 50 == 0) {
-                std::cerr << "[Telemetry Debug] Connection Exception in client.Get()" << std::endl;
-            }
+            static int exc = 0;
+            if (++exc % 50 == 0)
+                std::cerr << "[Telemetry] Exception in fetch worker." << std::endl;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
@@ -318,28 +383,42 @@ void process_audio_pipeline(std::vector<float> wav_data) {
     status_message = "Querying LLM...";
     current_state = STATE_PROCESSING_LLM;
 
-    // Retrieve latest telemetry safely
-    VehicleTelemetry tel;
+    // ── Build LLM context prompt generically from telemetry config ─────────────
+    std::vector<FieldDef>                      fields_snap;
+    std::map<std::string, double>              vals_snap;
+    std::map<std::string, std::vector<double>> arr_snap;
     {
         std::lock_guard<std::mutex> lock(telemetry_mutex);
-        tel = g_telemetry;
+        fields_snap = g_field_defs;
+        vals_snap   = g_values;
+        arr_snap    = g_array_values;
     }
 
-    std::string system_prompt = "You are the EdgeDrive vehicle's AI Voice Assistant. You are connected to the vehicle's CAN bus and telemetry systems. "
-                               "Current vehicle telemetry state: "
-                               "Speed: " + std::to_string((int)tel.speed) + " KMPH, "
-                               "RPM: " + std::to_string(tel.rpm) + ", "
-                               "Gear: " + std::to_string(tel.gear) + ", "
-                               "Engine Status: " + (tel.started ? "Running" : "Stopped") + ", "
-                               "Speed Alarm: " + (tel.speed_alarm ? "Active" : "Inactive") + ", "
-                               "Fuel Level: " + std::to_string((int)tel.fuel_level) + "%, "
-                               "Engine Coolant Temp: " + std::to_string((int)tel.coolant_temp) + " C, "
-                               "Cooling Fan Status: " + (tel.cooling_fan ? "Active" : "Inactive") + ", "
-                               "Tyre Pressures (PSI): FL=" + std::to_string((int)tel.tyre_pressures[0]) + 
-                               ", FR=" + std::to_string((int)tel.tyre_pressures[1]) + 
-                               ", RL=" + std::to_string((int)tel.tyre_pressures[2]) + 
-                               ", RR=" + std::to_string((int)tel.tyre_pressures[3]) + ". "
-                               "Use this telemetry state to answer any questions the driver asks about the vehicle's speed, engine, gear, rpm, fuel, coolant temperature, cooling fan, or tyre pressures. Keep your answers brief and natural.";
+    std::string system_prompt = "You are the EdgeDrive vehicle AI Voice Assistant connected to the CAN bus. Current telemetry: ";
+    for (const auto& fd : fields_snap) {
+        if (!fd.llm_context) continue;
+        std::string val_str;
+        if (fd.type == FieldType::GRID_4) {
+            auto it = arr_snap.find(fd.key);
+            if (it != arr_snap.end()) {
+                val_str = "(";
+                for (size_t i = 0; i < it->second.size() && i < 4; i++) {
+                    if (i > 0) val_str += ", ";
+                    std::string lbl = (i < fd.sublabels.size()) ? fd.sublabels[i] : std::to_string(i);
+                    val_str += lbl + "=" + std::to_string((int)it->second[i]);
+                }
+                val_str += ")";
+            }
+        } else if (fd.type == FieldType::BOOLEAN) {
+            auto it = vals_snap.find(fd.key);
+            val_str = (it != vals_snap.end() && it->second > 0.5) ? fd.true_label : fd.false_label;
+        } else {
+            auto it = vals_snap.find(fd.key);
+            val_str = (it != vals_snap.end()) ? std::to_string((int)it->second) : "0";
+        }
+        system_prompt += fd.label + ": " + val_str + " " + fd.unit + ", ";
+    }
+    system_prompt += ". Keep answers brief and natural.";
 
     // Send to Ollama /api/chat
     httplib::Client ollama_client("127.0.0.1", 11434);
@@ -487,11 +566,62 @@ void InitializeKWS() {
     kws_stream = SherpaOnnxCreateKeywordStream(kws);
 }
 
+// ─── Generic Dashboard Render Helpers ──────────────────────────────────
+static void render_field_progress_bar(const FieldDef& fd, double value) {
+    float fv = (float)value;
+    bool warn = (fd.warn_above < FLT_MAX && fv >= fd.warn_above) ||
+                (fd.warn_below > -FLT_MAX && fv <= fd.warn_below);
+    if (warn && !fd.warn_label.empty())
+        ImGui::TextColored(ImVec4(1.0f,0.2f,0.2f,1.0f), "%s: %.1f %s  [%s]", fd.label.c_str(), fv, fd.unit.c_str(), fd.warn_label.c_str());
+    else
+        ImGui::Text("%s: %.1f %s", fd.label.c_str(), fv, fd.unit.c_str());
+    float ratio = (fd.max_val > 0.0f) ? (fv / fd.max_val) : 0.0f;
+    ImGui::ProgressBar(ratio < 0.0f ? 0.0f : (ratio > 1.0f ? 1.0f : ratio), ImVec2(-FLT_MIN, 20.0f));
+    ImGui::Spacing();
+}
+
+static void render_field_text(const FieldDef& fd, double value) {
+    float fv = (float)value;
+    bool warn = (fd.warn_above < FLT_MAX && fv >= fd.warn_above) ||
+                (fd.warn_below > -FLT_MAX && fv <= fd.warn_below);
+    if (warn && !fd.warn_label.empty())
+        ImGui::TextColored(ImVec4(1.0f,0.3f,0.3f,1.0f), "%s: %.1f %s  [%s]", fd.label.c_str(), fv, fd.unit.c_str(), fd.warn_label.c_str());
+    else
+        ImGui::Text("%s: %.1f %s", fd.label.c_str(), fv, fd.unit.c_str());
+    ImGui::Spacing();
+}
+
+static void render_field_boolean(const FieldDef& fd, double value) {
+    bool bv = value > 0.5;
+    ImGui::Text("%s: ", fd.label.c_str()); ImGui::SameLine();
+    ImGui::TextColored(bv ? ImVec4(0.2f,0.8f,0.2f,1.0f) : ImVec4(0.5f,0.5f,0.5f,1.0f),
+                       "%s", bv ? fd.true_label.c_str() : fd.false_label.c_str());
+    ImGui::Spacing();
+}
+
+static void render_field_grid4(const FieldDef& fd, const std::vector<double>& values) {
+    ImGui::Text("%s (%s):", fd.label.c_str(), fd.unit.c_str());
+    ImGui::Columns(2, ("grid_" + fd.key).c_str(), false);
+    for (size_t i = 0; i < values.size() && i < 4; i++) {
+        std::string lbl = (i < fd.sublabels.size()) ? fd.sublabels[i] : std::to_string(i);
+        bool warn = (fd.warn_below > -FLT_MAX && values[i] <= fd.warn_below);
+        ImGui::Text("%s:", lbl.c_str()); ImGui::SameLine();
+        ImGui::TextColored(warn ? ImVec4(1.0f,0.2f,0.2f,1.0f) : ImVec4(0.2f,0.8f,0.2f,1.0f),
+                           "%.1f", (float)values[i]);
+        ImGui::NextColumn();
+    }
+    ImGui::Columns(1);
+    ImGui::Spacing();
+}
+
 int main() {
     // Setup KWS
     InitializeKWS();
 
-    // Start background telemetry worker thread
+    // Fetch field definitions from orchestrator config endpoint (one-time at startup)
+    fetch_telemetry_config();
+
+    // Start background telemetry worker thread (10Hz)
     std::thread telemetry_thread(telemetry_fetch_worker);
 
     // Setup Miniaudio
@@ -580,91 +710,58 @@ int main() {
 
         ImGui::End();
 
-        // 2. Vehicle Telemetry Dashboard Window (Right Half)
+        // 2. Vehicle Telemetry Dashboard Window (Right Half) — driven by /api/telemetry_config
         ImGui::SetNextWindowPos(ImVec2(450.0f, 0));
         ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - 450.0f, io.DisplaySize.y));
-        ImGui::Begin("Vehicle Telemetry Dashboard", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-        
+        ImGui::Begin("Vehicle Telemetry Dashboard", nullptr,
+                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+
         ImGui::TextColored(ImVec4(0.2f, 0.6f, 0.9f, 1.0f), "Vehicle Telemetry Dashboard");
         ImGui::Separator();
         ImGui::Spacing();
 
-        VehicleTelemetry tel;
+        // Snapshot all state under lock
+        std::vector<FieldDef>                      render_fields;
+        std::map<std::string, double>              render_vals;
+        std::map<std::string, std::vector<double>> render_arr_vals;
         {
             std::lock_guard<std::mutex> lock(telemetry_mutex);
-            tel = g_telemetry;
+            render_fields   = g_field_defs;
+            render_vals     = g_values;
+            render_arr_vals = g_array_values;
         }
 
-        ImGui::Text("Engine Status: ");
-        ImGui::SameLine();
-        if (tel.started) {
-            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "RUNNING");
-        } else {
-            ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.2f, 1.0f), "STOPPED");
+        if (render_fields.empty()) {
+            ImGui::TextColored(ImVec4(1.0f,0.7f,0.2f,1.0f),
+                "Waiting for telemetry config from orchestrator...");
         }
 
-        ImGui::Text("Transmission Gear: ");
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.2f, 1.0f), "Gear %d", tel.gear);
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // Speed Meter
-        if (tel.speed_alarm) {
-            ImGui::TextColored(ImVec4(1.0f, 0.1f, 0.1f, 1.0f), "Speed: %.1f KMPH (ALARM ACTIVE!)", tel.speed);
-        } else {
-            ImGui::Text("Speed: %.1f KMPH", tel.speed);
+        // Generic render loop — no hardcoded field names
+        for (const auto& fd : render_fields) {
+            static const std::vector<double> empty_vec;
+            switch (fd.type) {
+                case FieldType::PROGRESS_BAR: {
+                    auto it = render_vals.find(fd.key);
+                    render_field_progress_bar(fd, it != render_vals.end() ? it->second : 0.0);
+                    break;
+                }
+                case FieldType::TEXT: {
+                    auto it = render_vals.find(fd.key);
+                    render_field_text(fd, it != render_vals.end() ? it->second : 0.0);
+                    break;
+                }
+                case FieldType::BOOLEAN: {
+                    auto it = render_vals.find(fd.key);
+                    render_field_boolean(fd, it != render_vals.end() ? it->second : 0.0);
+                    break;
+                }
+                case FieldType::GRID_4: {
+                    auto it = render_arr_vals.find(fd.key);
+                    render_field_grid4(fd, it != render_arr_vals.end() ? it->second : empty_vec);
+                    break;
+                }
+            }
         }
-        ImGui::ProgressBar(tel.speed / 200.0f, ImVec2(-FLT_MIN, 20.0f), "Speed");
-
-        ImGui::Spacing();
-
-        // RPM Meter
-        ImGui::Text("Engine Speed: %d RPM", tel.rpm);
-        ImGui::ProgressBar((float)tel.rpm / 8000.0f, ImVec2(-FLT_MIN, 20.0f), "RPM");
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // Fuel Level Progress Bar
-        if (tel.fuel_level <= 15.0f) {
-            ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "Fuel Level: %.1f%% (LOW FUEL!)", tel.fuel_level);
-        } else {
-            ImGui::Text("Fuel Level: %.1f%%", tel.fuel_level);
-        }
-        ImGui::ProgressBar(tel.fuel_level / 100.0f, ImVec2(-FLT_MIN, 20.0f), "Fuel");
-
-        ImGui::Spacing();
-
-        // Coolant Temp & Fan Status
-        ImGui::Text("Radiator Coolant Temp: %.1f *C", tel.coolant_temp);
-        ImGui::Text("Cooling Fan: ");
-        ImGui::SameLine();
-        if (tel.cooling_fan) {
-            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.8f, 1.0f), "ACTIVE");
-        } else {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "OFF");
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // 2x2 Tyre Pressures Layout
-        ImGui::Text("Tyre Pressures (PSI):");
-        ImGui::Columns(2, "tyres", false);
-        const char* labels[] = { "FL: ", "FR: ", "RL: ", "RR: " };
-        for (int i = 0; i < 4; i++) {
-            ImVec4 color = (tel.tyre_pressures[i] < 24.0f) ? ImVec4(1.0f, 0.2f, 0.2f, 1.0f) : ImVec4(0.2f, 0.8f, 0.2f, 1.0f);
-            ImGui::Text("%s", labels[i]);
-            ImGui::SameLine();
-            ImGui::TextColored(color, "%.1f PSI", tel.tyre_pressures[i]);
-            ImGui::NextColumn();
-        }
-        ImGui::Columns(1);
 
         ImGui::End();
 

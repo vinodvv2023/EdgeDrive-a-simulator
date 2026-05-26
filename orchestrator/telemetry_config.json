@@ -1,0 +1,96 @@
+{
+  "fields": [
+    {
+      "key": "started",
+      "label": "Engine Status",
+      "unit": "",
+      "type": "boolean",
+      "true_label": "RUNNING",
+      "false_label": "STOPPED",
+      "warn_tts_message": "",
+      "llm_context": true
+    },
+    {
+      "key": "speed",
+      "label": "Speed",
+      "unit": "KMPH",
+      "type": "progress_bar",
+      "max": 200.0,
+      "warn_above": 120.0,
+      "warn_label": "ALARM ACTIVE!",
+      "warn_tts_message": "",
+      "llm_context": true
+    },
+    {
+      "key": "rpm",
+      "label": "Engine Speed",
+      "unit": "RPM",
+      "type": "progress_bar",
+      "max": 8000.0,
+      "warn_label": "",
+      "warn_tts_message": "",
+      "llm_context": true
+    },
+    {
+      "key": "gear",
+      "label": "Transmission Gear",
+      "unit": "",
+      "type": "text",
+      "warn_label": "",
+      "warn_tts_message": "",
+      "llm_context": true
+    },
+    {
+      "key": "fuel_level",
+      "label": "Fuel Level",
+      "unit": "%",
+      "type": "progress_bar",
+      "max": 100.0,
+      "warn_below": 15.0,
+      "warn_label": "LOW FUEL!",
+      "warn_tts_message": "Warning! Fuel level is critically low, currently at fifteen percent. Please refuel soon.",
+      "llm_context": true
+    },
+    {
+      "key": "coolant_temp",
+      "label": "Coolant Temperature",
+      "unit": "C",
+      "type": "text",
+      "warn_above": 95.0,
+      "warn_label": "OVERHEATING!",
+      "warn_tts_message": "Warning! Engine coolant temperature is critically high. Please stop and check the radiator.",
+      "llm_context": true
+    },
+    {
+      "key": "cooling_fan",
+      "label": "Cooling Fan",
+      "unit": "",
+      "type": "boolean",
+      "true_label": "ACTIVE",
+      "false_label": "OFF",
+      "warn_tts_message": "",
+      "llm_context": true
+    },
+    {
+      "key": "tyre_pressures",
+      "label": "Tyre Pressures",
+      "unit": "PSI",
+      "type": "grid_4",
+      "sublabels": ["FL", "FR", "RL", "RR"],
+      "warn_below": 24.0,
+      "warn_label": "CRITICAL!",
+      "warn_tts_message": "Warning! A tyre pressure is critically low. Please check your tyres immediately.",
+      "llm_context": true
+    },
+    {
+      "key": "speed_alarm",
+      "label": "Speed Alarm",
+      "unit": "",
+      "type": "boolean",
+      "true_label": "ACTIVE",
+      "false_label": "OK",
+      "warn_tts_message": "",
+      "llm_context": false
+    }
+  ]
+}

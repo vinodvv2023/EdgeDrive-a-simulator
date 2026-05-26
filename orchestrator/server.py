@@ -5,10 +5,25 @@ import cv2
 import asyncio
 import websockets
 import json
+import os
 import winsound
 import time
 from threading import Thread
 import paho.mqtt.client as mqtt
+
+# ─── Load Telemetry Config ───────────────────────────────────────────────────
+def _load_telemetry_cfg():
+    cfg_path = os.path.join(os.path.dirname(__file__), "telemetry_config.json")
+    try:
+        with open(cfg_path, "r") as f:
+            cfg = json.load(f)
+        print(f"[OrchestratorCfg] Loaded telemetry_config.json ({len(cfg.get('fields', []))} fields)")
+        return cfg
+    except Exception as e:
+        print(f"[OrchestratorCfg] WARNING: Could not load telemetry_config.json: {e}")
+        return {"fields": []}
+
+telemetry_config = _load_telemetry_cfg()
 
 # Initialize MQTT Client
 try:
@@ -62,6 +77,10 @@ def get_vehicle_status():
     global vehicle_state
     return vehicle_state
 
+@app.get("/api/telemetry_config")
+def get_telemetry_config():
+    return telemetry_config
+
 def generate_frames():
     if camera is None:
         while True:
@@ -111,9 +130,8 @@ vehicle_state = {
     "tyre_pressures": [32.0, 32.0, 32.0, 32.0]
 }
 
-# Warning alarm states to prevent TTS spam
-has_warned_fuel = False
-has_warned_tyre = False
+# Per-field warning state: tracks whether TTS has already fired for each field key
+_warn_fired = {}  # key -> bool
 
 def send_warning_tts(text):
     import urllib.request
@@ -216,18 +234,45 @@ async def connect_to_simulator():
                             "tyre_pressures": tyre_pressures
                         }
                         
-                        # TTS alerts check
-                        global has_warned_fuel, has_warned_tyre
+                        # ── Generic TTS threshold check driven by telemetry_config.json ──────
+                        global _warn_fired
                         if started:
-                            if fuel_level <= 15.0 and not has_warned_fuel:
-                                has_warned_fuel = True
-                                Thread(target=lambda: send_warning_tts("Warning! Fuel level is low, currently at fifteen percent. Please refuel."), daemon=True).start()
-                            if tyre_pressures[0] <= 24.0 and not has_warned_tyre:
-                                has_warned_tyre = True
-                                Thread(target=lambda: send_warning_tts("Warning! Front left tyre pressure is critically low. Please check your tyres."), daemon=True).start()
+                            for field in telemetry_config.get("fields", []):
+                                fkey    = field.get("key", "")
+                                tts_msg = field.get("warn_tts_message", "")
+                                if not tts_msg or not fkey:
+                                    continue  # no TTS message configured for this field
+
+                                if _warn_fired.get(fkey, False):
+                                    continue  # already warned this session
+
+                                raw_val = vehicle_state.get(fkey)
+                                if raw_val is None:
+                                    continue
+
+                                triggered = False
+                                warn_above = field.get("warn_above")
+                                warn_below = field.get("warn_below")
+
+                                if isinstance(raw_val, list):
+                                    # Array field (e.g. tyre_pressures): warn if ANY element breaches
+                                    if warn_below is not None:
+                                        triggered = any(v <= warn_below for v in raw_val)
+                                    if warn_above is not None:
+                                        triggered = triggered or any(v >= warn_above for v in raw_val)
+                                else:
+                                    if warn_below is not None and float(raw_val) <= warn_below:
+                                        triggered = True
+                                    if warn_above is not None and float(raw_val) >= warn_above:
+                                        triggered = True
+
+                                if triggered:
+                                    _warn_fired[fkey] = True
+                                    msg = tts_msg  # capture for lambda
+                                    Thread(target=lambda m=msg: send_warning_tts(m), daemon=True).start()
                         else:
-                            has_warned_fuel = False
-                            has_warned_tyre = False
+                            # Engine stopped — reset all warning flags
+                            _warn_fired = {}
                         
                         # Publish alarm state via MQTT
                         try:

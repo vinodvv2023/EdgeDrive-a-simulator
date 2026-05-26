@@ -1,7 +1,34 @@
 import asyncio
 import websockets
 import json
+import os
 import paho.mqtt.client as mqtt
+
+# ─── Load Simulation Config ───────────────────────────────────────────────────
+def _load_sim_cfg():
+    cfg_path = os.path.join(os.path.dirname(__file__), "simulation_config.json")
+    try:
+        with open(cfg_path, "r") as f:
+            cfg = json.load(f)
+        print(f"[SimCfg] Loaded simulation_config.json")
+        return cfg
+    except Exception as e:
+        print(f"[SimCfg] WARNING: Could not load simulation_config.json: {e}")
+        return {}
+
+_sim_cfg = _load_sim_cfg()
+_sensors = _sim_cfg.get("sensors", {})
+
+# Pull tyre config as list
+_tyre_cfg = _sensors.get("tyre_pressures", [
+    {"start": 32.0, "rate_per_tick": -0.05, "clamp_min": 10.0, "only_when_running": True},
+    {"start": 32.0, "rate_per_tick":  0.0,  "clamp_min": 10.0, "only_when_running": False},
+    {"start": 32.0, "rate_per_tick":  0.0,  "clamp_min": 10.0, "only_when_running": False},
+    {"start": 32.0, "rate_per_tick":  0.0,  "clamp_min": 10.0, "only_when_running": False},
+])
+
+_fuel_cfg     = _sensors.get("fuel_level",  {"start": 100.0, "rate_per_tick": -0.1417, "clamp_min": 0.0,   "only_when_running": True})
+_coolant_cfg  = _sensors.get("coolant_temp", {"start": 40.0,  "rate_per_tick":  0.05,   "clamp_max": 110.0, "fan_trigger_temp": 95.0, "fan_cooling_rate": -0.03, "only_when_running": True})
 
 # Initialize MQTT Client
 try:
@@ -19,11 +46,11 @@ is_started = False
 gas_pressed = False
 brake_pressed = False
 
-# New simulated sensor states
-fuel_level = 100.0
-coolant_temp = 40.0
-cooling_fan = False
-tyre_pressures = [32.0, 32.0, 32.0, 32.0]
+# Sensor states — initialised from simulation_config.json
+fuel_level     = float(_fuel_cfg.get("start", 100.0))
+coolant_temp   = float(_coolant_cfg.get("start", 40.0))
+cooling_fan    = False
+tyre_pressures = [float(t.get("start", 32.0)) for t in _tyre_cfg]
 
 async def handle_client(websocket):
     global is_started, gas_pressed, brake_pressed, gear
@@ -89,29 +116,36 @@ async def simulate(websocket):
                 lat += 0.00001 * (speed / 100.0)
                 lon += 0.00001 * (speed / 100.0)
                 
-                # Fuel depletion (drops to 15% after 1 minute)
-                if fuel_level > 0.0:
-                    fuel_level = max(0.0, fuel_level - 0.1417)
-                    
-                # Tyre pressure leak (Front Left tyre slow leak: drops 0.05 PSI per step)
-                if tyre_pressures[0] > 10.0:
-                    tyre_pressures[0] = max(10.0, tyre_pressures[0] - 0.05)
-                    
-                # Radiator engine coolant temperature
+                # ── Fuel (config-driven rate) ─────────────────────────────
+                f_rate  = float(_fuel_cfg.get("rate_per_tick", -0.1417))
+                f_clamp = float(_fuel_cfg.get("clamp_min", 0.0))
+                fuel_level = max(f_clamp, fuel_level + f_rate)
+
+                # ── Tyre pressures (per-tyre config-driven rate) ──────────
+                for i, tcfg in enumerate(_tyre_cfg):
+                    rate  = float(tcfg.get("rate_per_tick", 0.0))
+                    clamp = float(tcfg.get("clamp_min", 10.0))
+                    tyre_pressures[i] = max(clamp, tyre_pressures[i] + rate)
+
+                # ── Coolant temperature (config-driven rate + fan logic) ──
+                c_rate    = float(_coolant_cfg.get("rate_per_tick", 0.05))
+                c_clamp   = float(_coolant_cfg.get("clamp_max", 110.0))
+                c_fan_thr = float(_coolant_cfg.get("fan_trigger_temp", 95.0))
+                c_fan_cool= float(_coolant_cfg.get("fan_cooling_rate", -0.03))
+
                 if cooling_fan:
-                    coolant_temp += 0.01
-                    if coolant_temp > 92.0:
-                        coolant_temp -= 0.03
+                    # Fan active: apply cooling rate
+                    coolant_temp = min(c_clamp, coolant_temp + c_rate + c_fan_cool)
                 else:
-                    coolant_temp += 0.05
-                    if coolant_temp >= 95.0:
+                    coolant_temp = min(c_clamp, coolant_temp + c_rate)
+                    if coolant_temp >= c_fan_thr:
                         cooling_fan = True
             else:
-                # Reset simulation parameters when engine is turned off for easy repeat testing
-                fuel_level = 100.0
-                coolant_temp = 40.0
-                cooling_fan = False
-                tyre_pressures = [32.0, 32.0, 32.0, 32.0]
+                # Reset all sensors to config start values when engine stops
+                fuel_level     = float(_fuel_cfg.get("start", 100.0))
+                coolant_temp   = float(_coolant_cfg.get("start", 40.0))
+                cooling_fan    = False
+                tyre_pressures = [float(t.get("start", 32.0)) for t in _tyre_cfg]
                 
             data = {
                 "started": is_started,

@@ -1,0 +1,25 @@
+{
+  "tick_rate_hz": 10,
+  "sensors": {
+    "fuel_level": {
+      "start": 100.0,
+      "rate_per_tick": -0.1417,
+      "clamp_min": 0.0,
+      "only_when_running": true
+    },
+    "tyre_pressures": [
+      { "label": "FL", "start": 32.0, "rate_per_tick": -0.013, "clamp_min": 10.0, "only_when_running": true  },
+      { "label": "FR", "start": 32.0, "rate_per_tick":  0.0,   "clamp_min": 10.0, "only_when_running": false },
+      { "label": "RL", "start": 32.0, "rate_per_tick":  0.0,   "clamp_min": 10.0, "only_when_running": false },
+      { "label": "RR", "start": 32.0, "rate_per_tick":  0.0,   "clamp_min": 10.0, "only_when_running": false }
+    ],
+    "coolant_temp": {
+      "start": 40.0,
+      "rate_per_tick": 0.025,
+      "clamp_max": 110.0,
+      "fan_trigger_temp": 95.0,
+      "fan_cooling_rate": -0.03,
+      "only_when_running": true
+    }
+  }
+}
