@@ -42,3 +42,7 @@ cmake_install.cmake
 imgui.ini
 Kuksa-vss-data/custom_vss.json
 *.log
+
+# Documentation and Plans
+docs/
+
