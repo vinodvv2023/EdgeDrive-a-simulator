@@ -147,6 +147,59 @@ To add and monitor a new telemetry attribute (e.g., **Battery Temperature** or *
 
 ---
 
+### 4.4 Prerequisites
+Ensure you have the following installed on your system:
+* **Docker Desktop** (required to run Mosquitto MQTT and Eclipse Kuksa Databroker containers)
+* **Python 3.10+** (with virtual environment capability)
+* **Node.js (v18+) & npm** (required to compile and run the React Dashboard UI)
+* **CMake (v3.22+) & a C++ compiler** (MSVC/MinGW on Windows, GCC on Linux for rebuilding local STT/TTS services if needed)
+* **Ollama CLI** (with the `gemma:2b` model pulled: `ollama pull gemma:2b`)
+
+---
+
+### 4.5 Installation & Setup
+1. **Prepare Python Virtual Environment & Install Dependencies:**
+   ```powershell
+   # Activate Python environment
+   .\venv\Scripts\activate
+   
+   # Install telematics, MQTT, and FastAPI packages
+   pip install paho-mqtt websockets kuksa-client fastapi uvicorn opencv-python pydantic
+   ```
+2. **Install React Dashboard Packages:**
+   ```powershell
+   cd dashboard
+   npm install
+   cd ..
+   ```
+3. **Download Offline Models:**
+   * Make sure you have the Whisper model `ggml-base.bin` in the root directory.
+   * Make sure keyword files are extracted under `external/sherpa-onnx-kws-model/`.
+
+---
+
+### 4.6 How to Run
+A unified launch script, `run_assistant.bat`, handles setting up environment variables, compiling schemas, and launching all 10 services.
+
+Run the launcher from an administrative or standard Powershell/CMD terminal:
+```powershell
+.\run_assistant.bat
+```
+
+#### Detailed Breakdown of the 10 Services:
+1. **TTS Microservice (Port 8081)**: A local C++ text-to-speech executable (`tts_service.exe`) that listens on Port 8081 and utilizes the Windows Speech API (SAPI) to synthesize spoken voice alerts.
+2. **STT Microservice (Port 8080)**: A local C++ speech-to-text executable (`stt_service.exe`) utilizing Whisper.cpp with CUDA hardware acceleration to transcribe recorded user WAV inputs.
+3. **Ollama Server (Port 11434)**: The local LLM backend running Ollama (`ollama serve`) which processes system and chat prompts using the offline `gemma:2b` model.
+4. **Mosquitto MQTT Broker (Port 1883)**: A Docker container running the Eclipse Mosquitto broker to facilitate high-frequency (10Hz) publish-subscribe telematics communication.
+5. **Kuksa Databroker (Port 55555)**: A Docker container running eclipse-kuksa databroker that serves as the in-vehicle database, mounting the generated `custom_vss.json` schema.
+6. **Voice Assistant GUI (C++ Desktop App)**: The ImGui front-end interface (`assistant_gui.exe`) that captures audio via `miniaudio`, detects wake-words via `sherpa-onnx`, and renders live telematics dials and transcripts.
+7. **CAN Physics Simulator (Port 8083)**: The Python physics loop engine (`simulator/main.py`) which updates and broadcasts raw speed, gear, RPM, fuel, tire pressures, and location telemetry over WebSockets and MQTT.
+8. **CAN Orchestrator Server (Port 8082)**: A FastAPI Python backend (`orchestrator/server.py`) that handles DMS camera processing, executes speed limits, runs alert-based TTS triggers, and coordinates data flow.
+9. **Kuksa Feeder Bridge**: A Python bridge daemon (`simulator/kuksa_feeder.py`) that reads MQTT telemetry, filters changes using smart delta logic, and publishes to the Kuksa Databroker using VSS format.
+10. **Dashboard UI (Port 5173)**: A local React web application (`npm run dev`) that displays interactive gauges, interactive controls (pedals, steering), active alerts, maps, and camera feeds.
+
+---
+
 ## 5. Glossary of Terms
 
 ### 5.1 Automotive & Telematics Concepts
